@@ -88,6 +88,15 @@ final class ScannerViewModel {
         candidateDetected = false
     }
 
+    func lookupSetNumber(_ setNum: String) {
+        debounceTask?.cancel()
+        isPaused = true
+        state = .processing
+        Task {
+            await resolveSet(setNum)
+        }
+    }
+
     func selectAmbiguousSet(_ legoSet: LegoSet) {
         state = .processing
         Task {

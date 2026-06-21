@@ -1,7 +1,9 @@
 import SwiftUI
 import PhotosUI
+import SwiftData
 
 struct ScannerView: View {
+    @Environment(\.modelContext) private var modelContext
     @State private var viewModel = ScannerViewModel()
     @State private var showHistory = false
     @State private var showSettings = false
@@ -52,7 +54,9 @@ struct ScannerView: View {
                 }
             }
             .sheet(isPresented: $showHistory) {
-                Text("Historique")
+                HistoryView { setNum in
+                    viewModel.lookupSetNumber(setNum)
+                }
             }
             .sheet(isPresented: $showSettings, onDismiss: {
                 hasAPIKey = KeychainService.shared.hasAPIKey
@@ -84,6 +88,22 @@ struct ScannerView: View {
                 viewModel.cameraController.stop()
             } else {
                 viewModel.cameraController.start()
+            }
+        }
+        .onChange(of: viewModel.state) { _, newState in
+            if case .found(let legoSet, let collectionStatus) = newState {
+                let isInCollection: Bool
+                let listId: Int?
+                switch collectionStatus {
+                case .inCollection(let userSet):
+                    isInCollection = true
+                    listId = userSet.listId
+                case .notInCollection, .unknown:
+                    isInCollection = false
+                    listId = nil
+                }
+                LocalRepository(modelContext: modelContext)
+                    .cacheSet(legoSet, isInCollection: isInCollection, listId: listId, listName: nil)
             }
         }
         .onChange(of: selectedPhotoItem) { _, newItem in
