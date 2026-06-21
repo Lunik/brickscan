@@ -72,10 +72,8 @@ struct SetDetailView: View {
                 }
             }
             .sheet(isPresented: $showListPicker) {
-                ListPickerView(setNum: viewModel.legoSet.setNum) { listName, isNowInList in
-                    viewModel.toastMessage = isNowInList
-                        ? "Set ajouté à \(listName)"
-                        : "Set retiré de \(listName)"
+                ListPickerView { listId, listName in
+                    Task { await viewModel.addToList(listId: listId, listName: listName) }
                 }
             }
             .alert("Retirer de la collection ?", isPresented: $showRemoveConfirmation) {
@@ -105,8 +103,11 @@ struct SetDetailView: View {
     private var statusBadge: some View {
         switch viewModel.collectionStatus {
         case .inCollection:
-            Label("Dans votre collection", systemImage: "checkmark.circle.fill")
-                .foregroundStyle(.green)
+            Label(
+                viewModel.collectionListName.map { "Dans votre liste « \($0) »" } ?? "Dans votre collection",
+                systemImage: "checkmark.circle.fill"
+            )
+            .foregroundStyle(.green)
         case .notInCollection:
             Label("Pas dans votre collection", systemImage: "xmark.circle.fill")
                 .foregroundStyle(Color(hex: "E3000B"))
@@ -126,20 +127,16 @@ struct SetDetailView: View {
     private var actionButtons: some View {
         if viewModel.statusIsUnknown {
             EmptyView()
-        } else {
-            VStack(spacing: 8) {
-                Button("Mes listes") {
-                    showListPicker = true
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(Color(hex: "E3000B"))
-
-                if viewModel.isInCollection {
-                    Button("Retirer de la collection", role: .destructive) {
-                        showRemoveConfirmation = true
-                    }
-                }
+        } else if viewModel.isInCollection {
+            Button("Retirer de la collection", role: .destructive) {
+                showRemoveConfirmation = true
             }
+        } else {
+            Button("Ajouter à une liste") {
+                showListPicker = true
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(Color(hex: "E3000B"))
         }
     }
 }

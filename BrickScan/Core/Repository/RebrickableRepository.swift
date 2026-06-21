@@ -8,8 +8,6 @@ protocol RebrickableRepositoryProtocol: Sendable {
     func fetchUserSet(setNum: String) async throws -> UserSet?
     func addSetToList(setNum: String, listId: Int) async throws -> UserSet
     func moveSetToList(setNum: String, fromListId: Int, toListId: Int) async throws -> UserSet
-    func isSetInList(setNum: String, listId: Int) async throws -> Bool
-    func removeSetFromList(setNum: String, listId: Int) async throws
     func removeSetFromCollection(setNum: String) async throws
     func fetchUserSetLists() async throws -> [SetList]
     func createSetList(name: String) async throws -> SetList
@@ -105,30 +103,6 @@ final class RebrickableRepository: RebrickableRepositoryProtocol, @unchecked Sen
             )
         }
         return try await addSetToList(setNum: setNum, listId: toListId)
-    }
-
-    // Checks whether a set already belongs to a given custom list. A set can
-    // belong to multiple custom lists at once, independent of true collection
-    // ownership (checked via fetchUserSet/userSetPath instead).
-    func isSetInList(setNum: String, listId: Int) async throws -> Bool {
-        try await withUserTokenRetry { userToken in
-            do {
-                let _: UserSet = try await self.client.get(
-                    path: RebrickableEndpoint.setListSetPath(userToken: userToken, listId: listId, setNum: setNum)
-                )
-                return true
-            } catch APIError.notFound {
-                return false
-            }
-        }
-    }
-
-    func removeSetFromList(setNum: String, listId: Int) async throws {
-        try await withUserTokenRetryVoid { userToken in
-            try await self.client.delete(
-                path: RebrickableEndpoint.setListSetPath(userToken: userToken, listId: listId, setNum: setNum)
-            )
-        }
     }
 
     // Endpoint 7
