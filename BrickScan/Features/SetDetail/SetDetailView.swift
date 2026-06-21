@@ -8,8 +8,8 @@ struct SetDetailView: View {
 
     let onScanAgain: () -> Void
 
-    init(legoSet: LegoSet, userSet: UserSet?, onScanAgain: @escaping () -> Void) {
-        _viewModel = State(initialValue: SetDetailViewModel(legoSet: legoSet, userSet: userSet))
+    init(legoSet: LegoSet, collectionStatus: CollectionStatus, onScanAgain: @escaping () -> Void) {
+        _viewModel = State(initialValue: SetDetailViewModel(legoSet: legoSet, collectionStatus: collectionStatus))
         self.onScanAgain = onScanAgain
     }
 
@@ -113,18 +113,30 @@ struct SetDetailView: View {
 
     @ViewBuilder
     private var statusBadge: some View {
-        if viewModel.isInCollection {
+        switch viewModel.collectionStatus {
+        case .inCollection:
             Label("Dans votre collection", systemImage: "checkmark.circle.fill")
                 .foregroundStyle(.green)
-        } else {
+        case .notInCollection:
             Label("Pas dans votre collection", systemImage: "xmark.circle.fill")
                 .foregroundStyle(Color(hex: "E3000B"))
+        case .unknown(let message):
+            VStack(spacing: 8) {
+                Label("Statut inconnu : \(message)", systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+                Button("Réessayer") {
+                    Task { await viewModel.retryCollectionStatus() }
+                }
+                .font(.footnote)
+            }
         }
     }
 
     @ViewBuilder
     private var actionButtons: some View {
-        if viewModel.isInCollection {
+        if viewModel.statusIsUnknown {
+            EmptyView()
+        } else if viewModel.isInCollection {
             VStack(spacing: 8) {
                 Button("Changer de liste") {
                     showListPicker = true
