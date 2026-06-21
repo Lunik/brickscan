@@ -5,6 +5,7 @@ import Observation
 final class SetDetailViewModel {
     let legoSet: LegoSet
     var collectionStatus: CollectionStatus
+    var collectionListName: String?
     var isLoading = false
     var errorMessage: String?
     var toastMessage: String?
@@ -28,10 +29,20 @@ final class SetDetailViewModel {
     }
 
     @MainActor
+    func addToList(listId: Int, listName: String) async {
+        await perform {
+            _ = try await self.repository.addSetToList(setNum: self.legoSet.setNum, listId: listId)
+            self.toastMessage = "Set ajouté à \(listName)"
+            await self.refreshCollectionStatus()
+        }
+    }
+
+    @MainActor
     func removeFromCollection() async {
         await perform {
             try await self.repository.removeSetFromCollection(setNum: self.legoSet.setNum)
             self.collectionStatus = .notInCollection
+            self.collectionListName = nil
             self.toastMessage = "Set retiré de la collection"
         }
     }
@@ -49,11 +60,24 @@ final class SetDetailViewModel {
         do {
             let userSet = try await repository.fetchUserSet(setNum: legoSet.setNum)
             collectionStatus = userSet.map(CollectionStatus.inCollection) ?? .notInCollection
+            await refreshCollectionListName()
         } catch let error as APIError {
             collectionStatus = .unknown(error.errorDescription ?? "Statut de collection inconnu")
+            collectionListName = nil
         } catch {
             collectionStatus = .unknown("Statut de collection inconnu")
+            collectionListName = nil
         }
+    }
+
+    @MainActor
+    private func refreshCollectionListName() async {
+        guard case .inCollection(let userSet) = collectionStatus, let listId = userSet.listId else {
+            collectionListName = nil
+            return
+        }
+        let lists = (try? await repository.fetchUserSetLists()) ?? []
+        collectionListName = lists.first(where: { $0.id == listId })?.name
     }
 
     @MainActor
