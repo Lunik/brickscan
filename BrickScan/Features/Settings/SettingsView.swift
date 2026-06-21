@@ -54,16 +54,18 @@ struct SettingsView: View {
                                 .font(.footnote)
                         }
 
-                        Button {
-                            Task { _ = await viewModel.linkAccount() }
-                        } label: {
-                            if viewModel.isLinkingAccount {
-                                ProgressView()
-                            } else {
-                                Text("Lier mon compte")
+                        if !viewModel.username.isEmpty && !viewModel.password.isEmpty {
+                            Button {
+                                Task { _ = await viewModel.linkAccount() }
+                            } label: {
+                                if viewModel.isLinkingAccount {
+                                    ProgressView()
+                                } else {
+                                    Text("Lier mon compte")
+                                }
                             }
+                            .disabled(viewModel.apiKey.isEmpty || viewModel.isLinkingAccount)
                         }
-                        .disabled(viewModel.apiKey.isEmpty || viewModel.username.isEmpty || viewModel.password.isEmpty || viewModel.isLinkingAccount)
                     }
                 } header: {
                     Text("Compte Rebrickable")
