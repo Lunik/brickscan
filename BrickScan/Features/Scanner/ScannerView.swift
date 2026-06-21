@@ -10,6 +10,7 @@ struct ScannerView: View {
     @State private var hasAPIKey = KeychainService.shared.hasAPIKey
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var showPhotoPicker = false
+    var onStopScanning: (() -> Void)?
 
     var body: some View {
         NavigationStack {
@@ -26,6 +27,13 @@ struct ScannerView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     HStack {
+                        if let onStopScanning {
+                            Button {
+                                onStopScanning()
+                            } label: {
+                                Image(systemName: "xmark")
+                            }
+                        }
                         Button {
                             showHistory = true
                         } label: {
