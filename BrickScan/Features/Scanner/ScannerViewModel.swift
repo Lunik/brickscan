@@ -35,6 +35,7 @@ enum ScannerState: Equatable {
 final class ScannerViewModel {
     var state: ScannerState = .scanning
     var torchOn = false
+    var candidateDetected = false
 
     let cameraController = CameraController()
     private let barcodeScanner = BarcodeScanner()
@@ -45,6 +46,9 @@ final class ScannerViewModel {
     private var lastIdentifiedAt: Date?
     private var debounceTask: Task<Void, Never>?
     private var isPaused = false
+
+    private var lastFrameProcessedAt: Date?
+    private let frameProcessingInterval: TimeInterval = 0.8
 
     init(repository: RebrickableRepositoryProtocol = RebrickableRepository()) {
         self.repository = repository
@@ -81,6 +85,7 @@ final class ScannerViewModel {
     func resumeScanning() {
         state = .scanning
         isPaused = false
+        candidateDetected = false
     }
 
     func importImage(_ cgImage: CGImage) {
@@ -114,6 +119,12 @@ final class ScannerViewModel {
     private func handleFrame(_ pixelBuffer: CVPixelBuffer) {
         guard !isPaused else { return }
 
+        if let lastFrameProcessedAt,
+           Date().timeIntervalSince(lastFrameProcessedAt) < frameProcessingInterval {
+            return
+        }
+        lastFrameProcessedAt = Date()
+
         barcodeScanner.detectBarcode(in: pixelBuffer) { [weak self] barcodeValue in
             if let barcodeValue {
                 let candidate = SetNumberExtractor.extractFromBarcode(barcodeValue)
@@ -137,6 +148,7 @@ final class ScannerViewModel {
             return
         }
 
+        candidateDetected = true
         debounceTask?.cancel()
         debounceTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 1_500_000_000)
@@ -150,6 +162,7 @@ final class ScannerViewModel {
         lastIdentifiedSetNum = setNum
         lastIdentifiedAt = Date()
         isPaused = true
+        candidateDetected = false
         state = .processing
 
         do {

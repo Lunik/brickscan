@@ -14,7 +14,7 @@ struct ScannerView: View {
                 CameraPreviewView(controller: viewModel.cameraController)
                     .ignoresSafeArea()
 
-                ScanOverlayView(state: viewModel.state)
+                ScanOverlayView(state: viewModel.state, candidateDetected: viewModel.candidateDetected)
 
                 if !hasAPIKey {
                     apiKeyWarningBanner
