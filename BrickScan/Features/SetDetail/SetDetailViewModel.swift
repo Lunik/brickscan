@@ -4,25 +4,33 @@ import Observation
 @Observable
 final class SetDetailViewModel {
     let legoSet: LegoSet
-    var userSet: UserSet?
+    var collectionStatus: CollectionStatus
     var isLoading = false
     var errorMessage: String?
     var toastMessage: String?
 
     private let repository: RebrickableRepositoryProtocol
 
-    init(legoSet: LegoSet, userSet: UserSet?, repository: RebrickableRepositoryProtocol = RebrickableRepository()) {
+    init(legoSet: LegoSet, collectionStatus: CollectionStatus, repository: RebrickableRepositoryProtocol = RebrickableRepository()) {
         self.legoSet = legoSet
-        self.userSet = userSet
+        self.collectionStatus = collectionStatus
         self.repository = repository
     }
 
-    var isInCollection: Bool { userSet != nil }
+    var isInCollection: Bool {
+        if case .inCollection = collectionStatus { return true }
+        return false
+    }
+
+    var statusIsUnknown: Bool {
+        if case .unknown = collectionStatus { return true }
+        return false
+    }
 
     @MainActor
     func addToList(listId: Int, listName: String) async {
         await perform {
-            self.userSet = try await self.repository.addSetToList(setNum: self.legoSet.setNum, listId: listId)
+            self.collectionStatus = .inCollection(try await self.repository.addSetToList(setNum: self.legoSet.setNum, listId: listId))
             self.toastMessage = "Set ajouté à \(listName)"
         }
     }
@@ -30,7 +38,7 @@ final class SetDetailViewModel {
     @MainActor
     func moveToList(listId: Int, listName: String) async {
         await perform {
-            self.userSet = try await self.repository.moveSetToList(setNum: self.legoSet.setNum, listId: listId)
+            self.collectionStatus = .inCollection(try await self.repository.moveSetToList(setNum: self.legoSet.setNum, listId: listId))
             self.toastMessage = "Set déplacé vers \(listName)"
         }
     }
@@ -39,8 +47,23 @@ final class SetDetailViewModel {
     func removeFromCollection() async {
         await perform {
             try await self.repository.removeSetFromCollection(setNum: self.legoSet.setNum)
-            self.userSet = nil
+            self.collectionStatus = .notInCollection
             self.toastMessage = "Set retiré de la collection"
+        }
+    }
+
+    @MainActor
+    func retryCollectionStatus() async {
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+        do {
+            let userSet = try await repository.fetchUserSet(setNum: legoSet.setNum)
+            collectionStatus = userSet.map(CollectionStatus.inCollection) ?? .notInCollection
+        } catch let error as APIError {
+            collectionStatus = .unknown(error.errorDescription ?? "Statut de collection inconnu")
+        } catch {
+            collectionStatus = .unknown("Statut de collection inconnu")
         }
     }
 

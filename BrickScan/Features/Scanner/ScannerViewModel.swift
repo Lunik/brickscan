@@ -5,7 +5,7 @@ import Observation
 enum ScannerState: Equatable {
     case scanning
     case processing
-    case found(LegoSet, UserSet?)
+    case found(LegoSet, CollectionStatus)
     case ambiguous([LegoSet])
     case notFound
     case error(String)
@@ -86,6 +86,13 @@ final class ScannerViewModel {
         state = .scanning
         isPaused = false
         candidateDetected = false
+    }
+
+    func selectAmbiguousSet(_ legoSet: LegoSet) {
+        state = .processing
+        Task {
+            state = .found(legoSet, await fetchCollectionStatus(for: legoSet.setNum))
+        }
     }
 
     func importImage(_ cgImage: CGImage) {
@@ -169,8 +176,7 @@ final class ScannerViewModel {
             let resolution = try await repository.resolveSet(setNum: setNum)
             switch resolution {
             case .found(let legoSet):
-                let userSet = try? await repository.fetchUserSet(setNum: legoSet.setNum)
-                state = .found(legoSet, userSet)
+                state = .found(legoSet, await fetchCollectionStatus(for: legoSet.setNum))
             case .ambiguous(let sets):
                 state = .ambiguous(sets)
             case .notFound:
@@ -180,6 +186,17 @@ final class ScannerViewModel {
         } catch {
             state = .error((error as? APIError)?.errorDescription ?? "Erreur inconnue")
             isPaused = false
+        }
+    }
+
+    private func fetchCollectionStatus(for setNum: String) async -> CollectionStatus {
+        do {
+            let userSet = try await repository.fetchUserSet(setNum: setNum)
+            return userSet.map(CollectionStatus.inCollection) ?? .notInCollection
+        } catch let error as APIError {
+            return .unknown(error.errorDescription ?? "Statut de collection inconnu")
+        } catch {
+            return .unknown("Statut de collection inconnu")
         }
     }
 }

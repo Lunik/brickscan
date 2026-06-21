@@ -60,8 +60,8 @@ struct ScannerView: View {
                 SettingsView()
             }
             .sheet(isPresented: setDetailBinding) {
-                if case .found(let legoSet, let userSet) = viewModel.state {
-                    SetDetailView(legoSet: legoSet, userSet: userSet) {
+                if case .found(let legoSet, let collectionStatus) = viewModel.state {
+                    SetDetailView(legoSet: legoSet, collectionStatus: collectionStatus) {
                         viewModel.resumeScanning()
                     }
                 }
@@ -69,11 +69,7 @@ struct ScannerView: View {
             .sheet(isPresented: ambiguousBinding) {
                 if case .ambiguous(let sets) = viewModel.state {
                     AmbiguousSetPickerView(sets: sets) { selected in
-                        viewModel.state = .processing
-                        Task {
-                            // Re-trigger detail resolution for the chosen set.
-                            viewModel.state = .found(selected, nil)
-                        }
+                        viewModel.selectAmbiguousSet(selected)
                     } onCancel: {
                         viewModel.resumeScanning()
                     }

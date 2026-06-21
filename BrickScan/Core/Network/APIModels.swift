@@ -51,6 +51,12 @@ struct UserSet: Codable, Hashable {
     }
 }
 
+enum CollectionStatus: Equatable {
+    case inCollection(UserSet)
+    case notInCollection
+    case unknown(String)
+}
+
 struct SetList: Codable, Identifiable, Hashable {
     let id: Int
     let name: String
