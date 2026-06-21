@@ -72,14 +72,10 @@ struct SetDetailView: View {
                 }
             }
             .sheet(isPresented: $showListPicker) {
-                ListPickerView { listId, listName in
-                    Task {
-                        if viewModel.isInCollection {
-                            await viewModel.moveToList(listId: listId, listName: listName)
-                        } else {
-                            await viewModel.addToList(listId: listId, listName: listName)
-                        }
-                    }
+                ListPickerView(setNum: viewModel.legoSet.setNum) { listName, isNowInList in
+                    viewModel.toastMessage = isNowInList
+                        ? "Set ajouté à \(listName)"
+                        : "Set retiré de \(listName)"
                 }
             }
             .alert("Retirer de la collection ?", isPresented: $showRemoveConfirmation) {
@@ -130,24 +126,20 @@ struct SetDetailView: View {
     private var actionButtons: some View {
         if viewModel.statusIsUnknown {
             EmptyView()
-        } else if viewModel.isInCollection {
+        } else {
             VStack(spacing: 8) {
-                Button("Changer de liste") {
+                Button("Mes listes") {
                     showListPicker = true
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(Color(hex: "E3000B"))
 
-                Button("Retirer de la collection", role: .destructive) {
-                    showRemoveConfirmation = true
+                if viewModel.isInCollection {
+                    Button("Retirer de la collection", role: .destructive) {
+                        showRemoveConfirmation = true
+                    }
                 }
             }
-        } else {
-            Button("Ajouter à une liste") {
-                showListPicker = true
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(Color(hex: "E3000B"))
         }
     }
 }

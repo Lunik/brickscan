@@ -253,4 +253,50 @@ final class RebrickableRepositoryTests: XCTestCase {
         XCTAssertTrue(requestedPaths[0].hasPrefix("DELETE"))
         XCTAssertTrue(requestedPaths[1].hasPrefix("POST"))
     }
+
+    func testIsSetInListReturnsTrueWhenFound() async throws {
+        KeychainService.shared.save(key: .userToken, value: "test_token")
+        defer { KeychainService.shared.delete(key: .userToken) }
+
+        MockURLProtocol.requestHandler = { request in
+            XCTAssertTrue(request.url!.absoluteString.contains("/users/test_token/setlists/524286/sets/77261-1/"))
+            return self.response(status: 200, json: [
+                "set": [
+                    "set_num": "77261-1", "name": "Test", "year": 2024,
+                    "theme_id": 1, "num_parts": 100, "set_img_url": NSNull(), "set_url": NSNull()
+                ],
+                "quantity": 1,
+                "include_spares": false,
+                "list_id": 524286
+            ])
+        }
+
+        let inList = try await repository.isSetInList(setNum: "77261-1", listId: 524286)
+        XCTAssertTrue(inList)
+    }
+
+    func testIsSetInListReturnsFalseWhenNotFound() async throws {
+        KeychainService.shared.save(key: .userToken, value: "test_token")
+        defer { KeychainService.shared.delete(key: .userToken) }
+
+        MockURLProtocol.requestHandler = { request in
+            (HTTPURLResponse(url: request.url!, statusCode: 404, httpVersion: nil, headerFields: nil)!, Data())
+        }
+
+        let inList = try await repository.isSetInList(setNum: "77261-1", listId: 524286)
+        XCTAssertFalse(inList)
+    }
+
+    func testRemoveSetFromListSendsDelete() async throws {
+        KeychainService.shared.save(key: .userToken, value: "test_token")
+        defer { KeychainService.shared.delete(key: .userToken) }
+
+        MockURLProtocol.requestHandler = { request in
+            XCTAssertEqual(request.httpMethod, "DELETE")
+            XCTAssertTrue(request.url!.absoluteString.contains("/users/test_token/setlists/524286/sets/77261-1/"))
+            return (HTTPURLResponse(url: request.url!, statusCode: 204, httpVersion: nil, headerFields: nil)!, Data())
+        }
+
+        try await repository.removeSetFromList(setNum: "77261-1", listId: 524286)
+    }
 }

@@ -27,31 +27,6 @@ final class SetDetailViewModel {
         return false
     }
 
-    // Adding/moving a set to a custom list (e.g. a wishlist) is independent from
-    // actual collection ownership, so the collection badge is refreshed from the
-    // real /users/{token}/sets/ endpoint afterward instead of being inferred from
-    // the setlist response.
-    @MainActor
-    func addToList(listId: Int, listName: String) async {
-        await perform {
-            _ = try await self.repository.addSetToList(setNum: self.legoSet.setNum, listId: listId)
-            self.toastMessage = "Set ajouté à \(listName)"
-            await self.refreshCollectionStatus()
-        }
-    }
-
-    @MainActor
-    func moveToList(listId: Int, listName: String) async {
-        guard case .inCollection(let currentUserSet) = collectionStatus, let fromListId = currentUserSet.listId else {
-            return
-        }
-        await perform {
-            _ = try await self.repository.moveSetToList(setNum: self.legoSet.setNum, fromListId: fromListId, toListId: listId)
-            self.toastMessage = "Set déplacé vers \(listName)"
-            await self.refreshCollectionStatus()
-        }
-    }
-
     @MainActor
     func removeFromCollection() async {
         await perform {
