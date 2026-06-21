@@ -34,7 +34,6 @@
 		A441F0A6D49E28D1D64086E8 /* ScannerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 018680A419A94F2F204B57FA /* ScannerViewModel.swift */; };
 		ABCF9FDDC0D3A6AF2806C35D /* RequestThrottler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73886699BB06991E236F2C41 /* RequestThrottler.swift */; };
 		AC7E8D442A52754425AB6D55 /* SetDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6DE7E14F0E4C544FC98C192 /* SetDetailView.swift */; };
-		ADD97B23DCEFCA55F5344C77 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A19C8E596DC609E082B0D70A /* HomeView.swift */; };
 		AFFE62B92F1C214EB2953F6F /* CollectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3BECDF2A4F463D423EC52099 /* CollectionView.swift */; };
 		CED04F9A44E36072CDEA48F5 /* RebrickableRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03355648223F3DAB8543B226 /* RebrickableRepository.swift */; };
 		DF2F4AEE6FE4583D5AF4F644 /* SetNumberExtractorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C2A5C440D02099D722A1D00 /* SetNumberExtractorTests.swift */; };
@@ -81,7 +80,6 @@
 		89F1865C1D75AB75F6378190 /* BarcodeScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BarcodeScanner.swift; sourceTree = "<group>"; };
 		8AFCAD809F7B38DCD3C91128 /* SplashView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplashView.swift; sourceTree = "<group>"; };
 		93FD818D6A4D0AD4DB297E1F /* SetDetailViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetDetailViewModel.swift; sourceTree = "<group>"; };
-		A19C8E596DC609E082B0D70A /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
 		ADA3DFDB413F900467683F22 /* BrickScanApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrickScanApp.swift; sourceTree = "<group>"; };
 		B6DE7E14F0E4C544FC98C192 /* SetDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetDetailView.swift; sourceTree = "<group>"; };
 		BF45FD65690AFE22D9D4A877 /* CollectionViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollectionViewModel.swift; sourceTree = "<group>"; };
@@ -175,7 +173,6 @@
 		30A87DE41CE9FF4736EFF641 /* Home */ = {
 			isa = PBXGroup;
 			children = (
-				A19C8E596DC609E082B0D70A /* HomeView.swift */,
 				5B92AAF1F07036C2ECD37FC0 /* HomeViewModel.swift */,
 			);
 			path = Home;
@@ -408,7 +405,6 @@
 				AFFE62B92F1C214EB2953F6F /* CollectionView.swift in Sources */,
 				7905CCC3683A28F0D6E72121 /* CollectionViewModel.swift in Sources */,
 				7D99762C16E03E4A341CDFC5 /* HistoryView.swift in Sources */,
-				ADD97B23DCEFCA55F5344C77 /* HomeView.swift in Sources */,
 				F0F1F684519A9F5BB7DA96D6 /* HomeViewModel.swift in Sources */,
 				62C2A4E849912372A92E0E79 /* KeychainService.swift in Sources */,
 				9496866B9AD50025D9D57E61 /* ListPickerView.swift in Sources */,

@@ -4,7 +4,6 @@ import SwiftData
 @main
 struct BrickScanApp: App {
     @State private var isShowingSplash = true
-    @State private var isScanning = false
 
     var modelContainer: ModelContainer = {
         let schema = Schema([CachedSet.self, CachedSetList.self])
@@ -15,17 +14,11 @@ struct BrickScanApp: App {
     var body: some Scene {
         WindowGroup {
             ZStack {
-                Group {
-                    if isScanning {
-                        ScannerView(onStopScanning: { isScanning = false })
-                    } else {
-                        HomeView(onStartScanning: { isScanning = true })
+                ScannerView()
+                    .onReceive(NotificationCenter.default.publisher(for: .didReset)) { _ in
+                        let context = modelContainer.mainContext
+                        LocalRepository(modelContext: context).clearAll()
                     }
-                }
-                .onReceive(NotificationCenter.default.publisher(for: .didReset)) { _ in
-                    let context = modelContainer.mainContext
-                    LocalRepository(modelContext: context).clearAll()
-                }
 
                 if isShowingSplash {
                     SplashView()

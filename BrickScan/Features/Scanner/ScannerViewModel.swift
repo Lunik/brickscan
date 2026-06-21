@@ -180,7 +180,6 @@ final class ScannerViewModel {
         isPaused = true
         candidateDetected = false
         state = .processing
-        ScanStatsStore.shared.recordScan()
 
         do {
             let resolution = try await repository.resolveSet(setNum: setNum)
