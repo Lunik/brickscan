@@ -1,5 +1,4 @@
 import SwiftUI
-import UIKit
 
 struct SettingsView: View {
     @State private var viewModel = SettingsViewModel()
@@ -21,22 +20,11 @@ struct SettingsView: View {
                         }
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
-                        .textContentType(.password)
 
                         Button {
                             isAPIKeyVisible.toggle()
                         } label: {
                             Image(systemName: isAPIKeyVisible ? "eye.slash" : "eye")
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(.secondary)
-
-                        Button {
-                            if let pasted = UIPasteboard.general.string {
-                                viewModel.apiKey = pasted
-                            }
-                        } label: {
-                            Image(systemName: "doc.on.clipboard")
                         }
                         .buttonStyle(.plain)
                         .foregroundStyle(.secondary)
