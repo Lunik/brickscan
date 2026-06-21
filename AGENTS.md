@@ -36,7 +36,8 @@ BrickScan/
 │   ├── Scanner/    BarcodeScanner, OCRScanner (Vision), SetNumberExtractor (regex parsing)
 │   └── Storage/    KeychainService, SwiftDataModels (@Model classes)
 ├── Features/       One folder per screen: Auth (privacy notice/detail only — no login),
-│                   Scanner, SetDetail, Settings (API key + account linking), Collection, Splash
+│                   Home (root dashboard + scan-mode toggle), Scanner, SetDetail,
+│                   Settings (API key + account linking), Collection, Splash
 └── Tests/BrickScanTests/   MockURLProtocol-based repository tests, SetNumberExtractor tests
 ```
 
@@ -45,8 +46,10 @@ inject `RebrickableRepository()` by default, swap a fake/mock in tests.
 
 ## Auth model — read this before touching anything credential-related
 
-There is **no login screen**. The app opens directly into the scanner. Two independent pieces
-of Rebrickable auth live in Settings (gear icon):
+There is **no login screen**. The app opens into `HomeView` (a stats dashboard); the camera
+button there toggles into `ScannerView`, and the `xmark` button in the scanner's toolbar
+(`onStopScanning`, wired in `BrickScanApp`) returns to Home. Two independent pieces of
+Rebrickable auth live in Settings (gear icon):
 
 - **API Key** — static, generated manually on rebrickable.com/profile. Required as
   `Authorization: key {API_KEY}` header on nearly every endpoint. Rebrickable has **no API
