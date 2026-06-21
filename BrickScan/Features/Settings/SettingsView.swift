@@ -3,26 +3,36 @@ import SwiftUI
 struct SettingsView: View {
     @State private var viewModel = SettingsViewModel()
     @State private var showPrivacyDetail = false
-    @State private var showSavedConfirmation = false
+    @State private var isAPIKeyVisible = false
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         NavigationStack {
             Form {
                 Section {
-                    TextField("Rebrickable API Key", text: $viewModel.apiKey)
+                    HStack {
+                        Group {
+                            if isAPIKeyVisible {
+                                TextField("Rebrickable API Key", text: $viewModel.apiKey)
+                            } else {
+                                SecureField("Rebrickable API Key", text: $viewModel.apiKey)
+                            }
+                        }
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
+
+                        Button {
+                            isAPIKeyVisible.toggle()
+                        } label: {
+                            Image(systemName: isAPIKeyVisible ? "eye.slash" : "eye")
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.secondary)
+                    }
                 } header: {
                     Text("API Key Rebrickable")
                 } footer: {
                     Text("Génère ta clé sur rebrickable.com/profile, dans la section API Key.")
-                }
-
-                if showSavedConfirmation {
-                    Text("Clé enregistrée")
-                        .foregroundStyle(.green)
-                        .font(.footnote)
                 }
 
                 Section {
@@ -45,7 +55,7 @@ struct SettingsView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Enregistrer") {
                         viewModel.save()
-                        showSavedConfirmation = true
+                        dismiss()
                     }
                     .disabled(viewModel.apiKey.isEmpty)
                 }
