@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ScanOverlayView: View {
     let state: ScannerState
+    var candidateDetected: Bool = false
 
     private var frameColor: Color {
         switch state {
@@ -12,14 +13,14 @@ struct ScanOverlayView: View {
         case .found, .ambiguous:
             return .green
         default:
-            return .white
+            return candidateDetected ? .green : .white
         }
     }
 
     private var statusText: String {
         switch state {
         case .scanning:
-            return "Scan en cours..."
+            return candidateDetected ? "Détecté ! Vérification..." : "Scan en cours..."
         case .processing:
             return "Recherche..."
         case .found:
@@ -45,16 +46,23 @@ struct ScanOverlayView: View {
                 .foregroundStyle(.white)
                 .clipShape(RoundedRectangle(cornerRadius: 12))
                 .padding(.top, 24)
+                .animation(.easeInOut(duration: 0.2), value: statusText)
 
             Spacer()
 
             RoundedRectangle(cornerRadius: 12)
-                .strokeBorder(frameColor, lineWidth: 3)
+                .strokeBorder(frameColor, lineWidth: candidateDetected ? 5 : 3)
                 .frame(width: 280, height: 180)
+                .scaleEffect(candidateDetected && state == .scanning ? 1.04 : 1)
+                .animation(.easeInOut(duration: 0.4).repeatForever(autoreverses: true), value: candidateDetected)
                 .overlay {
                     if state == .processing {
                         ProgressView()
                             .tint(.white)
+                    } else if candidateDetected, state == .scanning {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 36))
+                            .foregroundStyle(.green)
                     }
                 }
 
