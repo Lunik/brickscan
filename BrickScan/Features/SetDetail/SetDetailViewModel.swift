@@ -31,7 +31,7 @@ final class SetDetailViewModel {
     @MainActor
     func addToList(listId: Int, listName: String) async {
         await perform {
-            _ = try await self.repository.addSetToList(setNum: self.legoSet.setNum, listId: listId)
+            try await self.repository.addSetToList(setNum: self.legoSet.setNum, listId: listId)
             self.toastMessage = "Set ajouté à \(listName)"
             await self.refreshCollectionStatus()
         }

@@ -202,26 +202,20 @@ final class RebrickableRepositoryTests: XCTestCase {
         }
     }
 
-    func testAddSetToListPostsToSetListSetsEndpoint() async throws {
+    func testAddSetToListPostsToSetListSetsEndpointWithoutDecodingBody() async throws {
         KeychainService.shared.save(key: .userToken, value: "test_token")
         defer { KeychainService.shared.delete(key: .userToken) }
 
         MockURLProtocol.requestHandler = { request in
             XCTAssertEqual(request.httpMethod, "POST")
             XCTAssertTrue(request.url!.absoluteString.contains("/users/test_token/setlists/7/sets/"))
-            return self.response(status: 200, json: [
-                "set": [
-                    "set_num": "42143-1", "name": "Ferrari", "year": 2022,
-                    "theme_id": 1, "num_parts": 3778, "set_img_url": NSNull(), "set_url": NSNull()
-                ],
-                "quantity": 1,
-                "include_spares": false,
-                "list_id": 7
-            ])
+            // Rebrickable's real response shape for this endpoint is not
+            // reliably documented; returning an arbitrary body must not
+            // cause a decoding error since the repository ignores it.
+            return self.response(status: 201, json: ["unexpected": "shape"])
         }
 
-        let userSet = try await repository.addSetToList(setNum: "42143-1", listId: 7)
-        XCTAssertEqual(userSet.listId, 7)
+        try await repository.addSetToList(setNum: "42143-1", listId: 7)
     }
 
     func testMoveSetToListDeletesFromOldListThenAddsToNewList() async throws {
@@ -236,19 +230,10 @@ final class RebrickableRepositoryTests: XCTestCase {
                 return (HTTPURLResponse(url: request.url!, statusCode: 204, httpVersion: nil, headerFields: nil)!, Data())
             }
             XCTAssertTrue(request.url!.absoluteString.contains("/users/test_token/setlists/9/sets/"))
-            return self.response(status: 200, json: [
-                "set": [
-                    "set_num": "42143-1", "name": "Ferrari", "year": 2022,
-                    "theme_id": 1, "num_parts": 3778, "set_img_url": NSNull(), "set_url": NSNull()
-                ],
-                "quantity": 1,
-                "include_spares": false,
-                "list_id": 9
-            ])
+            return self.response(status: 201, json: ["unexpected": "shape"])
         }
 
-        let userSet = try await repository.moveSetToList(setNum: "42143-1", fromListId: 3, toListId: 9)
-        XCTAssertEqual(userSet.listId, 9)
+        try await repository.moveSetToList(setNum: "42143-1", fromListId: 3, toListId: 9)
         XCTAssertEqual(requestedPaths.count, 2)
         XCTAssertTrue(requestedPaths[0].hasPrefix("DELETE"))
         XCTAssertTrue(requestedPaths[1].hasPrefix("POST"))

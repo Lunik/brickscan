@@ -26,6 +26,14 @@ final class NetworkClient: @unchecked Sendable {
         return try await send(request)
     }
 
+    func post(path: String, formBody: [String: String]) async throws {
+        var request = URLRequest(url: URL(string: baseURL + path)!)
+        request.httpMethod = "POST"
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        request.httpBody = Self.encodeFormBody(formBody)
+        _ = try await sendRaw(request)
+    }
+
     func patch<T: Decodable>(path: String, jsonBody: [String: Any]) async throws -> T {
         var request = URLRequest(url: URL(string: baseURL + path)!)
         request.httpMethod = "PATCH"

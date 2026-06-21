@@ -6,8 +6,9 @@ protocol RebrickableRepositoryProtocol: Sendable {
     func searchSets(query: String, pageSize: Int) async throws -> [LegoSet]
     func resolveSet(setNum: String) async throws -> SetResolution
     func fetchUserSet(setNum: String) async throws -> UserSet?
-    func addSetToList(setNum: String, listId: Int) async throws -> UserSet
-    func moveSetToList(setNum: String, fromListId: Int, toListId: Int) async throws -> UserSet
+    func fetchUserSetsCount() async throws -> Int
+    func addSetToList(setNum: String, listId: Int) async throws
+    func moveSetToList(setNum: String, fromListId: Int, toListId: Int) async throws
     func removeSetFromCollection(setNum: String) async throws
     func fetchUserSetLists() async throws -> [SetList]
     func createSetList(name: String) async throws -> SetList
@@ -83,9 +84,25 @@ final class RebrickableRepository: RebrickableRepositoryProtocol, @unchecked Sen
         }
     }
 
-    // Endpoint 5
-    func addSetToList(setNum: String, listId: Int) async throws -> UserSet {
+    // Total owned-set count, fetched for the home screen's collection stats.
+    func fetchUserSetsCount() async throws -> Int {
         try await withUserTokenRetry { userToken in
+            let response: PaginatedResponse<UserSet> = try await self.client.get(
+                path: RebrickableEndpoint.userSetsPath(userToken: userToken),
+                queryItems: [URLQueryItem(name: "page_size", value: "1")]
+            )
+            return response.count
+        }
+    }
+
+    // Endpoint 5
+    // The response shape for this endpoint isn't reliably the same nested
+    // Set object as /users/{token}/sets/{set_num}/ across Rebrickable's own
+    // implementation, so the body is intentionally not decoded here — only
+    // the HTTP status matters. Real collection status is read back separately
+    // via fetchUserSet.
+    func addSetToList(setNum: String, listId: Int) async throws {
+        try await withUserTokenRetryVoid { userToken in
             try await self.client.post(
                 path: RebrickableEndpoint.setListSetsPath(userToken: userToken, listId: listId),
                 formBody: ["set_num": setNum, "quantity": "1"]
@@ -96,13 +113,13 @@ final class RebrickableRepository: RebrickableRepositoryProtocol, @unchecked Sen
     // Endpoint 6
     // Rebrickable has no endpoint to change a set's list_id directly, so a
     // move is a delete from the old list followed by an add to the new one.
-    func moveSetToList(setNum: String, fromListId: Int, toListId: Int) async throws -> UserSet {
+    func moveSetToList(setNum: String, fromListId: Int, toListId: Int) async throws {
         try await withUserTokenRetryVoid { userToken in
             try await self.client.delete(
                 path: RebrickableEndpoint.setListSetPath(userToken: userToken, listId: fromListId, setNum: setNum)
             )
         }
-        return try await addSetToList(setNum: setNum, listId: toListId)
+        try await addSetToList(setNum: setNum, listId: toListId)
     }
 
     // Endpoint 7
