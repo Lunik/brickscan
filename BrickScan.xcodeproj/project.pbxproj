@@ -34,6 +34,7 @@
 		A441F0A6D49E28D1D64086E8 /* ScannerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 018680A419A94F2F204B57FA /* ScannerViewModel.swift */; };
 		ABCF9FDDC0D3A6AF2806C35D /* RequestThrottler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73886699BB06991E236F2C41 /* RequestThrottler.swift */; };
 		AC7E8D442A52754425AB6D55 /* SetDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6DE7E14F0E4C544FC98C192 /* SetDetailView.swift */; };
+		AD20015107489D008E4D133D /* ScanFeedback.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80CA089F76F3E3C76FF2AF25 /* ScanFeedback.swift */; };
 		AFFE62B92F1C214EB2953F6F /* CollectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3BECDF2A4F463D423EC52099 /* CollectionView.swift */; };
 		CED04F9A44E36072CDEA48F5 /* RebrickableRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03355648223F3DAB8543B226 /* RebrickableRepository.swift */; };
 		DF2F4AEE6FE4583D5AF4F644 /* SetNumberExtractorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C2A5C440D02099D722A1D00 /* SetNumberExtractorTests.swift */; };
@@ -71,6 +72,7 @@
 		7032B95BA426B28CC0166DB9 /* APIError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIError.swift; sourceTree = "<group>"; };
 		73886699BB06991E236F2C41 /* RequestThrottler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RequestThrottler.swift; sourceTree = "<group>"; };
 		793B4A90CE02E41785680F8E /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		80CA089F76F3E3C76FF2AF25 /* ScanFeedback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanFeedback.swift; sourceTree = "<group>"; };
 		81E7885854340950258B3E16 /* PrivacyDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivacyDetailView.swift; sourceTree = "<group>"; };
 		827A433D6DB08E04D0EEBA64 /* ListPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListPickerView.swift; sourceTree = "<group>"; };
 		89F1865C1D75AB75F6378190 /* BarcodeScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BarcodeScanner.swift; sourceTree = "<group>"; };
@@ -152,6 +154,7 @@
 			children = (
 				89F1865C1D75AB75F6378190 /* BarcodeScanner.swift */,
 				EF41CF6ADECF89768CA7AF45 /* OCRScanner.swift */,
+				80CA089F76F3E3C76FF2AF25 /* ScanFeedback.swift */,
 				DEDD8ECBD1E23AF7269D79BA /* SetNumberExtractor.swift */,
 			);
 			path = Scanner;
@@ -401,6 +404,7 @@
 				9ABE9D449307CC253FCE9246 /* RebrickableAPI.swift in Sources */,
 				CED04F9A44E36072CDEA48F5 /* RebrickableRepository.swift in Sources */,
 				ABCF9FDDC0D3A6AF2806C35D /* RequestThrottler.swift in Sources */,
+				AD20015107489D008E4D133D /* ScanFeedback.swift in Sources */,
 				29369B22DC736FD7C34180CB /* ScanOverlayView.swift in Sources */,
 				3ACF1859E1AAC82DF3140E73 /* ScannerView.swift in Sources */,
 				A441F0A6D49E28D1D64086E8 /* ScannerViewModel.swift in Sources */,
