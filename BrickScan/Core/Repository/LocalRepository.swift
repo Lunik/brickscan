@@ -30,10 +30,6 @@ final class LocalRepository {
         try? modelContext.save()
     }
 
-    func scannedSetsCount() -> Int {
-        (try? modelContext.fetchCount(FetchDescriptor<CachedSet>())) ?? 0
-    }
-
     func recentlyScannedSets(limit: Int = 50) -> [CachedSet] {
         let descriptor = FetchDescriptor<CachedSet>(
             sortBy: [SortDescriptor(\.lastScannedAt, order: .reverse)]

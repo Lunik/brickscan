@@ -51,10 +51,6 @@ final class KeychainService: @unchecked Sendable {
         load(key: .apiKey) != nil
     }
 
-    var hasUserToken: Bool {
-        load(key: .userToken) != nil
-    }
-
     func clearAll() {
         delete(key: .apiKey)
         delete(key: .userToken)
