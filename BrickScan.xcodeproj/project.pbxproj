@@ -24,6 +24,7 @@
 		795DD50B1CEB4BE4F38BF550 /* SetDetailViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93FD818D6A4D0AD4DB297E1F /* SetDetailViewModel.swift */; };
 		7B1D6E5049848B1256F59085 /* APIModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53B8A3DE686D3C036D9CBC2D /* APIModels.swift */; };
 		7D6AC8356A6AAB110D7B5519 /* APIError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7032B95BA426B28CC0166DB9 /* APIError.swift */; };
+		7D99762C16E03E4A341CDFC5 /* HistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3587591647823C4DA38828CF /* HistoryView.swift */; };
 		887066989013A8E8FBCC92A7 /* SwiftDataModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAD799DED9E1B077511E4862 /* SwiftDataModels.swift */; };
 		89C62887A1FA0741AEC4E795 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BFDF055D0B0EB7FDB2A45DD /* SettingsView.swift */; };
 		8A56A9BB62551F2C340A6316 /* PrivacyNoticeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FDECD4D7C97FEE4872AD564 /* PrivacyNoticeView.swift */; };
@@ -60,6 +61,7 @@
 		28AC395DD3CFD46941C5CFBF /* MockURLProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockURLProtocol.swift; sourceTree = "<group>"; };
 		2CBD05F34F7174F148EB31DF /* ScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScannerView.swift; sourceTree = "<group>"; };
 		349FC4402299E258B4B0F023 /* KeychainService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainService.swift; sourceTree = "<group>"; };
+		3587591647823C4DA38828CF /* HistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryView.swift; sourceTree = "<group>"; };
 		379789A0EEA743411B1C6E81 /* LocalRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalRepository.swift; sourceTree = "<group>"; };
 		3BECDF2A4F463D423EC52099 /* CollectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollectionView.swift; sourceTree = "<group>"; };
 		407101627323FA8C8191450D /* BrickScanTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = BrickScanTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -248,6 +250,14 @@
 			path = Tests;
 			sourceTree = "<group>";
 		};
+		ECFD2F3F41F94D74DD0A2BA8 /* History */ = {
+			isa = PBXGroup;
+			children = (
+				3587591647823C4DA38828CF /* HistoryView.swift */,
+			);
+			path = History;
+			sourceTree = "<group>";
+		};
 		F8D94800801DCFE694F20E77 /* Scanner */ = {
 			isa = PBXGroup;
 			children = (
@@ -264,6 +274,7 @@
 			children = (
 				027357E5F185DB5494789431 /* Auth */,
 				4CE0CCB57364208829ED225B /* Collection */,
+				ECFD2F3F41F94D74DD0A2BA8 /* History */,
 				F8D94800801DCFE694F20E77 /* Scanner */,
 				BB80CCB23548EA34A6BE907D /* SetDetail */,
 				5DE8B5716E1384BF2E7AC520 /* Settings */,
@@ -375,6 +386,7 @@
 				649E1854328DAD724E533117 /* CameraPreviewView.swift in Sources */,
 				AFFE62B92F1C214EB2953F6F /* CollectionView.swift in Sources */,
 				7905CCC3683A28F0D6E72121 /* CollectionViewModel.swift in Sources */,
+				7D99762C16E03E4A341CDFC5 /* HistoryView.swift in Sources */,
 				62C2A4E849912372A92E0E79 /* KeychainService.swift in Sources */,
 				9496866B9AD50025D9D57E61 /* ListPickerView.swift in Sources */,
 				1CC192ADC8762462AFF405FA /* LocalRepository.swift in Sources */,
