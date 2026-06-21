@@ -10,6 +10,7 @@ struct ScannerView: View {
     @State private var hasAPIKey = KeychainService.shared.hasAPIKey
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var showPhotoPicker = false
+    @State private var showManualEntry = false
 
     var body: some View {
         NavigationStack {
@@ -36,6 +37,11 @@ struct ScannerView: View {
                         } label: {
                             Image(systemName: "photo.on.rectangle")
                         }
+                        Button {
+                            showManualEntry = true
+                        } label: {
+                            Image(systemName: "keyboard")
+                        }
                     }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
@@ -55,6 +61,11 @@ struct ScannerView: View {
             }
             .sheet(isPresented: $showHistory) {
                 HistoryView { setNum in
+                    viewModel.lookupSetNumber(setNum)
+                }
+            }
+            .sheet(isPresented: $showManualEntry) {
+                ManualSetEntryView { setNum in
                     viewModel.lookupSetNumber(setNum)
                 }
             }
@@ -119,7 +130,7 @@ struct ScannerView: View {
     }
 
     private var isMenuOpen: Bool {
-        showHistory || showSettings || showPhotoPicker || setDetailBinding.wrappedValue || ambiguousBinding.wrappedValue
+        showHistory || showSettings || showPhotoPicker || showManualEntry || setDetailBinding.wrappedValue || ambiguousBinding.wrappedValue
     }
 
     private var apiKeyWarningBanner: some View {
@@ -167,6 +178,41 @@ struct ScannerView: View {
                 if !newValue { viewModel.resumeScanning() }
             }
         )
+    }
+}
+
+private struct ManualSetEntryView: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var setNum = ""
+    let onSubmit: (String) -> Void
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                TextField("Numéro de set, ex. 42143", text: $setNum)
+                    .keyboardType(.asciiCapable)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                    .onSubmit(submit)
+            }
+            .navigationTitle("Ajouter un set")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Annuler") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Rechercher", action: submit)
+                        .disabled(setNum.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+            }
+        }
+    }
+
+    private func submit() {
+        let trimmed = setNum.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
+        onSubmit(trimmed)
+        dismiss()
     }
 }
 
