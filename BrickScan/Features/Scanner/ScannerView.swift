@@ -143,9 +143,11 @@ struct AmbiguousSetPickerView: View {
                 } label: {
                     VStack(alignment: .leading) {
                         Text(set.setNum).font(.headline)
-                        Text(set.name).font(.subheadline)
+                        Text(set.name).font(.subheadline).foregroundStyle(.secondary)
                     }
+                    .foregroundStyle(.primary)
                 }
+                .buttonStyle(.plain)
             }
             .navigationTitle("Choisir un set")
             .toolbar {

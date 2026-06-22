@@ -22,24 +22,13 @@ struct HistoryView: View {
                             onSelect(cached.setNum)
                             dismiss()
                         } label: {
-                            HStack(spacing: 12) {
-                                AsyncImage(url: URL(string: cached.setImgUrl ?? "")) { phase in
-                                    switch phase {
-                                    case .success(let image):
-                                        image.resizable().scaledToFit()
-                                    default:
-                                        Image(systemName: "shippingbox")
-                                            .resizable()
-                                            .scaledToFit()
-                                            .foregroundStyle(.secondary)
-                                            .padding(8)
-                                    }
-                                }
-                                .frame(width: 48, height: 48)
+                            HStack(spacing: 14) {
+                                SetThumbnailView(imageUrl: cached.setImgUrl)
 
-                                VStack(alignment: .leading, spacing: 2) {
+                                VStack(alignment: .leading, spacing: 3) {
                                     Text(cached.setNum)
                                         .font(.headline)
+                                        .foregroundStyle(.primary)
                                     Text(cached.name)
                                         .font(.subheadline)
                                         .foregroundStyle(.secondary)
@@ -50,11 +39,13 @@ struct HistoryView: View {
 
                                 if cached.isInCollection {
                                     Image(systemName: "checkmark.circle.fill")
+                                        .font(.title3)
                                         .foregroundStyle(.green)
                                 }
                             }
-                            .foregroundStyle(.primary)
+                            .padding(.vertical, 4)
                         }
+                        .buttonStyle(.plain)
                     }
                 }
             }
