@@ -1,7 +1,6 @@
 import AudioToolbox
 import UIKit
 
-@MainActor
 enum ScanFeedback {
     // "Tock" — a short, neutral system sound used elsewhere in iOS for
     // lightweight confirmation feedback (e.g. Mail's swipe action).
