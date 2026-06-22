@@ -29,16 +29,39 @@ output through `grep -E "error:|Test Suite 'All|** TEST"` — raw output is enor
 
 ```
 BrickScan/
-├── App/            BrickScanApp (SwiftData ModelContainer, splash)
+├── App/            BrickScanApp (SwiftData ModelContainer, splash, Home/Scanner root switch)
 ├── Core/
 │   ├── Network/    NetworkClient, APIError, RebrickableEndpoint (path builders), APIModels
 │   ├── Repository/ RebrickableRepository (API calls), LocalRepository (SwiftData cache)
 │   ├── Scanner/    BarcodeScanner, OCRScanner (Vision), SetNumberExtractor (regex parsing)
-│   └── Storage/    KeychainService, SwiftDataModels (@Model classes)
-├── Features/       One folder per screen: Auth (privacy notice/detail only — no login),
-│                   Scanner, SetDetail, Settings (API key + account linking), Collection, Splash
+│   └── Storage/    KeychainService, ScanStatsStore (UserDefaults scan counter), SwiftDataModels (@Model classes)
+├── Features/       One folder per screen: Auth (privacy notice/detail only — no login), Home
+│                   (app root — stats + actions), Scanner (camera-only sub-screen), SetDetail,
+│                   Settings (API key + account linking), Collection, Splash
 └── Tests/BrickScanTests/   MockURLProtocol-based repository tests, SetNumberExtractor tests
 ```
+
+## App root is Home, not the scanner
+
+`HomeView` is the app root (`BrickScanApp` toggles between it and `ScannerView` via local
+`isScanning` state). It shows local + collection stats and owns History/Photo-import/Manual-entry/
+Settings — `ScannerView` is a focused camera sub-screen reached via Home's floating camera button,
+with only a Torch toggle and an X (back) button in its toolbar. This was attempted once before and
+reverted (`f09ac61` reverting `fcf76d2`) — it's been redone deliberately, this time with the
+camera-driven and manual/photo/history lookup flows sharing the *same* `ScannerViewModel` class
+(`HomeView` owns a second instance, `lookupViewModel`, that never has `.onAppear()`/`cameraController`
+started, so it costs nothing camera/battery-wise). If you add a new lookup entry point, wire it
+through `lookupViewModel.lookupSetNumber`/`.importImage`, not a new resolution path.
+
+`HomeViewModel` is owned by `BrickScanApp` (`@State private var homeViewModel`), not by `HomeView`
+itself — `HomeView` is a fresh struct instance every time the camera is exited (`isScanning` flips
+back to `false`), so a `.task`-created view model inside `HomeView` would re-run its setup
+(including a full `syncCollection()` network round-trip) on every single return from the camera.
+Owning it one level up means it's created and synced exactly once, at real app launch.
+`HomeView.onAppear` only calls the local, no-network `viewModel.loadFromCache()` to pick up
+anything scanned while the camera was open. Network re-sync only happens from: initial launch,
+pull-to-refresh, and returning from Settings (account link state may have changed). Don't add a
+sync call to a path that fires just from Home reappearing.
 
 `RebrickableRepositoryProtocol` is the seam for testing — view models depend on the protocol,
 inject `RebrickableRepository()` by default, swap a fake/mock in tests.
@@ -87,6 +110,14 @@ Known gotchas already paid for — don't rediscover them:
   without first confirming Rebrickable has shipped such an endpoint). `ListPickerView` is a
   single-select "add this owned/ownable set to one of your setlists" picker, not a generic list
   manager.
+- `GET /users/{user_token}/sets/` (full collection, used by `fetchAllUserSets`) is paginated
+  DRF-style (`count`/`next`/`previous`/`results`), same nested `"set"` shape per item as the
+  singular endpoint. `next` is a full URL, not a page number — `NetworkClient.get(absoluteURL:)`
+  exists for following it; don't try to re-derive page params manually.
+  **A set owned in multiple Set Lists is listed multiple times** (one row per list) — this is
+  documented behavior, not a bug. `LocalRepository.syncCollection` dedupes by `set_num`, keeping
+  the first occurrence, since `CachedSet` (like the rest of the app) assumes one current list per
+  set.
 - `POST /users/{user_token}/setlists/{list_id}/sets/` (add set to a list) does **not** reliably
   return the nested `Set` shape on success — decoding its response body as `UserSet` failed in
   production even though the add succeeded server-side. `RebrickableRepository.addSetToList`/
@@ -115,13 +146,44 @@ Known gotchas already paid for — don't rediscover them:
 
 ## Local SwiftData cache must be synced explicitly — it doesn't follow view-model state
 
-`HistoryView` reads `CachedSet` (SwiftData, via `LocalRepository`) — it does **not** observe
-`SetDetailViewModel`/`ScannerViewModel` state directly. Any place that changes a set's real
-collection/list status (add to list, remove from collection, status retry) must explicitly call
-`LocalRepository(modelContext:).cacheSet(...)` again afterward, or History's "in collection"
-checkmark silently goes stale. `SetDetailView` does this via `.onChange(of: viewModel.collectionStatus)`
-/ `.onChange(of: viewModel.collectionListName)` calling a local `syncCache()` — follow that
-pattern for any new view that mutates collection state.
+`HistoryView`/`CollectionView` read `CachedSet` (SwiftData, via `LocalRepository`) — they do
+**not** observe `SetDetailViewModel`/`ScannerViewModel` state directly. Any place that changes a
+set's real collection/list status (add to list, remove from collection, status retry) must
+explicitly call `LocalRepository(modelContext:).cacheSet(...)` again afterward, or the "in
+collection" checkmark silently goes stale. `SetDetailView` does this via
+`.onChange(of: viewModel.collectionStatus)` / `.onChange(of: viewModel.collectionListName)`
+calling a local `syncCache()` — follow that pattern for any new view that mutates collection
+state. `ScannerView`/`HomeView` use the shared `LocalRepository.cacheFoundState(_:)` helper on
+`.onChange(of: <their ScannerViewModel>.state)` instead of duplicating the switch-over-
+`CollectionStatus` logic — extend that helper, don't re-inline it a third time.
+
+`CachedSet.wasScanned` distinguishes why a row exists: `true` for sets the user actually scanned
+(feeds `HistoryView`), `false` for rows that only exist from a collection sync (feeds
+`CollectionView`). A set can be both — scanning an owned set doesn't clear `wasScanned`, and
+`LocalRepository.syncCollection` doesn't flip it off for existing rows, only sets it `false` on
+brand-new sync-only inserts.
+
+## Collection caching: per-set status is still live, full-collection browsing is cache-first
+
+Two different things, don't conflate them:
+
+- **Per-set collection status** (`fetchUserSet`, used by `ScannerViewModel`/`SetDetailViewModel`
+  for "is *this* set in my collection") is fetched fresh from the network whenever there's no
+  local cache hit — same as before, avoids showing a stale status for a set never seen locally.
+- **Full-collection browsing** (`CollectionView`, fed by `LocalRepository.syncCollection` /
+  `RebrickableRepository.fetchAllUserSets`) is a genuine offline cache with a "last synced at"
+  timestamp (`LocalRepository.lastFullSyncAt()` / `CollectionSyncState`), refreshed via
+  `HomeViewModel.syncCollection()` on appear and pull-to-refresh.
+- **Cache-first scan resolution**: when a candidate set number is identified and a `CachedSet`
+  row already exists for it, `ScannerViewModel.resolveSet` shows it **immediately**
+  (`cached.asLegoSet()`/`cached.asCollectionStatus()`, `state = .found(...)` with no network
+  round-trip) and sets `lastFoundWasFromCache = true`. The live `resolveSet`/`fetchCollectionStatus`
+  call still runs in the background afterward (mostly redundant once the sheet is already shown,
+  but harmless), and `SetDetailView` performs its own **silent** live reconciliation on appear
+  (`SetDetailViewModel.silentlyReconcileCollectionStatus()`, no spinner, fails silently if
+  offline) when `reconcileOnAppear` is true. This was deliberately added for responsiveness
+  (instant display from cache) — if you see a flash of last-known data before a fresher value
+  replaces it, that's the intended behavior, not a bug.
 
 ## Code signing
 
@@ -133,11 +195,15 @@ machine/account needs this, redo that lookup rather than guessing a team ID.
 
 ## Camera lifecycle
 
-The capture session must stop whenever anything is covering it — sheets, the Photos picker,
-Settings. `ScannerView.isMenuOpen` is the single source of truth for this; if you add a new
-sheet/picker to `ScannerView`, add its presented-state to `isMenuOpen`, don't add a one-off
-`onChange`. `PhotosPicker`'s label-style initializer has no observable presentation state — use
-the `.photosPicker(isPresented:selection:matching:)` modifier form instead, as already done.
+`ScannerView` is now a focused camera-only sub-screen (Torch + X button only — History, Photo
+import, Manual entry, and Settings all moved to `HomeView`, which never starts the camera for its
+own lookups). The capture session must still stop whenever something covers the camera — today
+that's just the set-detail/ambiguous-result sheets. `ScannerView.isMenuOpen` is the single source
+of truth for this; if you add a new sheet/picker back to `ScannerView` itself, add its
+presented-state to `isMenuOpen`, don't add a one-off `onChange`. `PhotosPicker`'s label-style
+initializer has no observable presentation state — use the
+`.photosPicker(isPresented:selection:matching:)` modifier form instead, as already done (now in
+`HomeView`).
 
 ## Scanning pipeline
 
@@ -157,19 +223,60 @@ the sound repeat every ~0.8s while a candidate stayed in frame. `lastIdentifiedS
 once per resolved candidate. Don't move it back to detection time without fixing that repeat-fire
 issue first.
 
-Besides the camera and photo-import paths, `ScannerView` also supports typing a set number
-directly via the `keyboard`-icon toolbar button → `ManualSetEntryView` sheet, which calls
-`viewModel.lookupSetNumber(setNum)` (the same entry point `HistoryView`'s tap-to-relookup uses).
+Besides the live camera path (in `ScannerView`), `HomeView` also supports typing a set number
+directly via its `keyboard`-icon action → `ManualSetEntryView` sheet, and importing a photo via
+`PhotosPicker`, both of which call `lookupViewModel.lookupSetNumber(setNum)` /
+`.importImage(cgImage)` (the same entry point `HistoryView`'s tap-to-relookup uses).
 `ManualSetEntryView`'s `TextField` grabs focus on appear via `@FocusState` + `.onAppear { isInputFocused = true }`
 so the keyboard is already up when the sheet opens — don't drop that when touching the view, and
-follow the same pattern for any other text-entry sheet presented over the scanner.
+follow the same pattern for any other text-entry sheet presented over the scanner or Home.
+
+## lego.com pricing — Cloudflare Managed Challenge, no plain HTTP client gets through
+
+`SetDetail` shows the official lego.com retail price (`LegoStoreRepository`,
+`Core/Network/LegoStoreRepository.swift`) so a scanned set's promo price can be judged against it.
+**lego.com is behind a Cloudflare Managed Challenge** — confirmed by inspecting response headers
+(`cf-mitigated: challenge`, `server: cloudflare`, a CSP allowlisting `challenges.cloudflare.com`)
+and the literal `<title>Just a moment...</title>` interstitial body. This was verified directly
+with `curl` using several realistic browser User-Agents (mobile Safari, desktop Safari, and the
+exact custom UA from an earlier non-iOS scraping tool) from multiple networks — **all blocked
+identically, every time.** This is not a UA/cookie/header problem and tweaking those won't fix
+it: the challenge requires executing real JavaScript, which no plain HTTP client (`URLSession`,
+`curl`, `httpx`, etc.) can do. Don't spend time re-trying header/UA variations on a plain
+`NetworkClient`-style request to lego.com — it will not work.
+
+The workaround: `LegoStoreRepository.fetchStorePrice` loads the product page in a real, hidden
+`WKWebView` (genuine WebKit JS engine, solves the challenge the way Safari would), polls until
+`document.title` stops being the challenge page and `og:title` is present, then reads the
+OpenGraph meta tags (`product:price:amount`, `product:price:currency`, `product:availability`)
+via `evaluateJavaScript`. Notes for anyone touching this:
+- iOS `WKWebView` has no real headless mode — it must be inserted into an actual window
+  (`UIApplication.shared...keyWindow`) to reliably load/execute JS; near-zero `alpha` keeps it
+  invisible without removing it from the view hierarchy. A detached/orphaned WKWebView is known to
+  stall content loading on some iOS versions.
+- This is slow (full page load + challenge-solve, can take several seconds) and not amenable to
+  the usual `MockURLProtocol`-based unit tests — there is no unit test for this path; verify it
+  manually (skill `verify`/`run`) by opening a SetDetail sheet and watching the price section.
+- `productId` for the URL is `setNum` with the `-1` suffix stripped (e.g. `10307-1` → `10307`).
+- A retired set keeps its lego.com page (so the page still loads and `og:title` is present) but
+  drops `product:price:amount` — that's the signal used for "retired", not an HTTP error code.
+- The fetch is deliberately **not** re-run on every SetDetail open the way `CollectionStatus`
+  reconciliation is (`SetDetailViewModel.loadStorePriceIfNeeded(staleAfter:)`, default 24h) —
+  unlike a lightweight API call, spinning up a WKWebView on every open would be slow and wasteful.
+  A manual refresh button (`refreshStorePrice()`) bypasses that staleness check.
+- If Cloudflare's challenge ever gets harder to pass even via WKWebView (e.g. adds a CAPTCHA step
+  a script can't click through), the documented fallback is the Brickset API (free key, but only
+  US/UK/CA/DE prices — DE/EUR is the closest proxy for FR pricing) — don't silently fall back to
+  scraping the bare HTML over `URLSession` again, it's been verified not to work.
 
 ## Things deliberately not built (don't re-add without asking)
 
-- No backend caching of collection status — it's always fetched fresh per the original plan
-  (avoids showing stale "in collection" state).
 - No retry-via-stored-password on a 403 — `RebrickableRepository.reauthenticateAndRefreshToken()`
   always rethrows `.forbidden` by design, since the password is never retained.
-- No Home/dashboard root screen — a version of this (stats + a camera button to toggle scan mode)
-  was built and then explicitly reverted by the user. The app's root is `ScannerView` directly.
-  Don't reintroduce a non-scanner root screen without being asked again.
+- No catalog-field (name/year/numParts/image) reconciliation on cache hits — only
+  `CollectionStatus` is silently re-fetched live (see above). Catalog data is static enough after
+  a set's release that re-fetching it on every cache hit wasn't judged worth the extra request;
+  ask before adding it if that assumption turns out wrong.
+- No search/filter UI on Collection/History yet, no per-theme/year stats breakdown, no exposed
+  "create list"/"move between lists" UI — `RebrickableRepository` supports the calls
+  (`createSetList`, `moveSetToList`) but nothing in `Features/` calls them yet.

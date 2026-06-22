@@ -170,6 +170,34 @@ final class RebrickableRepositoryTests: XCTestCase {
         XCTAssertEqual(userSet?.listId, 7)
     }
 
+    func testFetchAllUserSetsFollowsPaginationAndDecodesNestedSet() async throws {
+        KeychainService.shared.save(key: .userToken, value: "test_token")
+        defer { KeychainService.shared.delete(key: .userToken) }
+
+        MockURLProtocol.requestHandler = { request in
+            if request.url!.absoluteString.contains("page=2") {
+                return self.response(status: 200, json: [
+                    "count": 2, "next": NSNull(), "previous": "https://rebrickable.com/api/v3/users/test_token/sets/?page=1",
+                    "results": [[
+                        "set": ["set_num": "10307-1", "name": "Eiffel Tower", "year": 2022, "theme_id": 1, "num_parts": 10, "set_img_url": NSNull(), "set_url": NSNull()],
+                        "quantity": 1, "include_spares": false, "list_id": 2
+                    ]]
+                ])
+            }
+            return self.response(status: 200, json: [
+                "count": 2, "next": "https://rebrickable.com/api/v3/users/test_token/sets/?page=2", "previous": NSNull(),
+                "results": [[
+                    "set": ["set_num": "42143-1", "name": "Ferrari", "year": 2022, "theme_id": 1, "num_parts": 3778, "set_img_url": NSNull(), "set_url": NSNull()],
+                    "quantity": 1, "include_spares": false, "list_id": 1
+                ]]
+            ])
+        }
+
+        let userSets = try await repository.fetchAllUserSets()
+        XCTAssertEqual(userSets.map(\.setNum), ["42143-1", "10307-1"])
+        XCTAssertEqual(userSets.map(\.listId), [1, 2])
+    }
+
     func testForbiddenWithoutStoredPasswordPropagatesError() async {
         KeychainService.shared.save(key: .userToken, value: "expired_token")
         defer { KeychainService.shared.delete(key: .userToken) }

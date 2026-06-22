@@ -1,23 +1,17 @@
 import SwiftUI
-import PhotosUI
 import SwiftData
 
 struct ScannerView: View {
     @Environment(\.modelContext) private var modelContext
     @State private var viewModel = ScannerViewModel()
-    @State private var showHistory = false
-    @State private var showSettings = false
     @State private var hasAPIKey = KeychainService.shared.hasAPIKey
-    @State private var selectedPhotoItem: PhotosPickerItem?
-    @State private var showPhotoPicker = false
-    @State private var showManualEntry = false
+    var onStopScanning: (() -> Void)?
 
     var body: some View {
         NavigationStack {
             ZStack {
                 CameraPreviewView(controller: viewModel.cameraController)
                     .ignoresSafeArea()
-
                 ScanOverlayView(state: viewModel.state, candidateDetected: viewModel.candidateDetected)
 
                 if !hasAPIKey {
@@ -26,57 +20,33 @@ struct ScannerView: View {
             }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    HStack {
+                    if let onStopScanning {
                         Button {
-                            showHistory = true
+                            onStopScanning()
                         } label: {
-                            Image(systemName: "clock.arrow.circlepath")
-                        }
-                        Button {
-                            showPhotoPicker = true
-                        } label: {
-                            Image(systemName: "photo.on.rectangle")
-                        }
-                        Button {
-                            showManualEntry = true
-                        } label: {
-                            Image(systemName: "keyboard")
+                            Image(systemName: "xmark")
                         }
                     }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    HStack {
-                        Button {
-                            viewModel.toggleTorch()
-                        } label: {
-                            Image(systemName: viewModel.torchOn ? "bolt.fill" : "bolt.slash")
-                        }
-                        Button {
-                            showSettings = true
-                        } label: {
-                            Image(systemName: "gearshape")
-                        }
+                    Button {
+                        viewModel.toggleTorch()
+                    } label: {
+                        Image(systemName: viewModel.torchOn ? "bolt.fill" : "bolt.slash")
                     }
                 }
             }
-            .sheet(isPresented: $showHistory) {
-                HistoryView { setNum in
-                    viewModel.lookupSetNumber(setNum)
-                }
-            }
-            .sheet(isPresented: $showManualEntry) {
-                ManualSetEntryView { setNum in
-                    viewModel.lookupSetNumber(setNum)
-                }
-            }
-            .sheet(isPresented: $showSettings, onDismiss: {
-                hasAPIKey = KeychainService.shared.hasAPIKey
-            }) {
-                SettingsView()
-            }
             .sheet(isPresented: setDetailBinding) {
                 if case .found(let legoSet, let collectionStatus) = viewModel.state {
-                    SetDetailView(legoSet: legoSet, collectionStatus: collectionStatus) {
+                    let cached = LocalRepository(modelContext: modelContext).cachedSet(setNum: legoSet.setNum)
+                    SetDetailView(
+                        legoSet: legoSet,
+                        collectionStatus: collectionStatus,
+                        initialListName: viewModel.lastFoundWasFromCache ? cached?.currentListName : nil,
+                        initialStorePrice: cached?.storePriceEUR.map { StorePrice(amount: $0, currency: "EUR", availability: cached?.storeAvailability) },
+                        initialStorePriceFetchedAt: cached?.storePriceFetchedAt,
+                        reconcileOnAppear: viewModel.lastFoundWasFromCache
+                    ) {
                         viewModel.resumeScanning()
                     }
                 }
@@ -91,8 +61,10 @@ struct ScannerView: View {
                 }
             }
         }
-        .photosPicker(isPresented: $showPhotoPicker, selection: $selectedPhotoItem, matching: .images)
-        .onAppear { viewModel.onAppear() }
+        .onAppear {
+            viewModel.localRepository = LocalRepository(modelContext: modelContext)
+            viewModel.onAppear()
+        }
         .onDisappear { viewModel.onDisappear() }
         .onChange(of: isMenuOpen) { _, isOpen in
             if isOpen {
@@ -102,41 +74,18 @@ struct ScannerView: View {
             }
         }
         .onChange(of: viewModel.state) { _, newState in
-            if case .found(let legoSet, let collectionStatus) = newState {
-                let isInCollection: Bool
-                let listId: Int?
-                switch collectionStatus {
-                case .inCollection(let userSet):
-                    isInCollection = true
-                    listId = userSet.listId
-                case .notInCollection, .unknown:
-                    isInCollection = false
-                    listId = nil
-                }
-                LocalRepository(modelContext: modelContext)
-                    .cacheSet(legoSet, isInCollection: isInCollection, listId: listId, listName: nil)
-            }
-        }
-        .onChange(of: selectedPhotoItem) { _, newItem in
-            guard let newItem else { return }
-            Task {
-                if let data = try? await newItem.loadTransferable(type: Data.self),
-                   let cgImage = UIImage(data: data)?.cgImage {
-                    viewModel.importImage(cgImage)
-                }
-                selectedPhotoItem = nil
-            }
+            LocalRepository(modelContext: modelContext).cacheFoundState(newState)
         }
     }
 
     private var isMenuOpen: Bool {
-        showHistory || showSettings || showPhotoPicker || showManualEntry || setDetailBinding.wrappedValue || ambiguousBinding.wrappedValue
+        setDetailBinding.wrappedValue || ambiguousBinding.wrappedValue
     }
 
     private var apiKeyWarningBanner: some View {
         VStack {
             Button {
-                showSettings = true
+                onStopScanning?()
             } label: {
                 HStack {
                     Image(systemName: "exclamationmark.triangle.fill")
@@ -181,45 +130,7 @@ struct ScannerView: View {
     }
 }
 
-private struct ManualSetEntryView: View {
-    @Environment(\.dismiss) private var dismiss
-    @State private var setNum = ""
-    @FocusState private var isInputFocused: Bool
-    let onSubmit: (String) -> Void
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                TextField("Numéro de set, ex. 42143", text: $setNum)
-                    .keyboardType(.asciiCapable)
-                    .autocorrectionDisabled()
-                    .textInputAutocapitalization(.never)
-                    .focused($isInputFocused)
-                    .onSubmit(submit)
-            }
-            .navigationTitle("Ajouter un set")
-            .onAppear { isInputFocused = true }
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Annuler") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Rechercher", action: submit)
-                        .disabled(setNum.trimmingCharacters(in: .whitespaces).isEmpty)
-                }
-            }
-        }
-    }
-
-    private func submit() {
-        let trimmed = setNum.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty else { return }
-        onSubmit(trimmed)
-        dismiss()
-    }
-}
-
-private struct AmbiguousSetPickerView: View {
+struct AmbiguousSetPickerView: View {
     let sets: [LegoSet]
     let onSelect: (LegoSet) -> Void
     let onCancel: () -> Void

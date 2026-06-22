@@ -6,6 +6,7 @@ protocol RebrickableRepositoryProtocol: Sendable {
     func searchSets(query: String, pageSize: Int) async throws -> [LegoSet]
     func resolveSet(setNum: String) async throws -> SetResolution
     func fetchUserSet(setNum: String) async throws -> UserSet?
+    func fetchAllUserSets() async throws -> [UserSet]
     func addSetToList(setNum: String, listId: Int) async throws
     func moveSetToList(setNum: String, fromListId: Int, toListId: Int) async throws
     func removeSetFromCollection(setNum: String) async throws
@@ -80,6 +81,31 @@ final class RebrickableRepository: RebrickableRepositoryProtocol, @unchecked Sen
             } catch APIError.notFound {
                 return nil
             }
+        }
+    }
+
+    // Endpoint 4b
+    // Same nested "set" shape as fetchUserSet, paginated. A set owned in multiple Set Lists is
+    // listed multiple times (one row per list) per Rebrickable's own endpoint description, so
+    // callers that assume one list per set (LocalRepository.syncCollection) must dedupe by set_num.
+    func fetchAllUserSets() async throws -> [UserSet] {
+        try await withUserTokenRetry { userToken in
+            var allSets: [UserSet] = []
+            var nextURL: URL?
+            repeat {
+                let response: PaginatedResponse<UserSet>
+                if let nextURL {
+                    response = try await self.client.get(absoluteURL: nextURL)
+                } else {
+                    response = try await self.client.get(
+                        path: RebrickableEndpoint.userSetsPath(userToken: userToken),
+                        queryItems: [URLQueryItem(name: "page_size", value: "100")]
+                    )
+                }
+                allSets.append(contentsOf: response.results)
+                nextURL = response.next.flatMap(URL.init(string:))
+            } while nextURL != nil
+            return allSets
         }
     }
 

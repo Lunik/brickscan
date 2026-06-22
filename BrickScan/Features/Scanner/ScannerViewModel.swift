@@ -36,6 +36,11 @@ final class ScannerViewModel {
     var state: ScannerState = .scanning
     var torchOn = false
     var candidateDetected = false
+    /// True when the current `.found` state was served from the local cache (instant display)
+    /// rather than a fresh fetch — lets the presenting view know to silently reconcile it live.
+    var lastFoundWasFromCache = false
+
+    var localRepository: LocalRepository?
 
     let cameraController = CameraController()
     private let barcodeScanner = BarcodeScanner()
@@ -91,7 +96,6 @@ final class ScannerViewModel {
     func lookupSetNumber(_ setNum: String) {
         debounceTask?.cancel()
         isPaused = true
-        state = .processing
         Task {
             await resolveSet(setNum)
         }
@@ -179,7 +183,15 @@ final class ScannerViewModel {
         lastIdentifiedAt = Date()
         isPaused = true
         candidateDetected = false
-        state = .processing
+        ScanStatsStore.shared.recordScan()
+
+        if let cached = localRepository?.cachedSet(setNum: setNum) {
+            lastFoundWasFromCache = true
+            state = .found(cached.asLegoSet(), cached.asCollectionStatus())
+        } else {
+            lastFoundWasFromCache = false
+            state = .processing
+        }
         ScanFeedback.playCandidateDetectedSound()
 
         do {

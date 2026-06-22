@@ -18,6 +18,13 @@ final class NetworkClient: @unchecked Sendable {
         return try await send(request)
     }
 
+    /// For paginated list endpoints whose `next` field is a full URL (Rebrickable's convention).
+    func get<T: Decodable>(absoluteURL: URL) async throws -> T {
+        var request = URLRequest(url: absoluteURL)
+        request.httpMethod = "GET"
+        return try await send(request)
+    }
+
     func post<T: Decodable>(path: String, formBody: [String: String]) async throws -> T {
         var request = URLRequest(url: URL(string: baseURL + path)!)
         request.httpMethod = "POST"
@@ -74,6 +81,12 @@ final class NetworkClient: @unchecked Sendable {
         do {
             (data, response) = try await session.data(for: authenticatedRequest)
         } catch {
+            // SwiftUI's .refreshable can cancel its underlying task mid-request (e.g. if the
+            // pulled content reflows while the gesture is still tracking) — that's not a real
+            // connectivity failure, so don't mislabel it as one; let callers handle cancellation.
+            if (error as? URLError)?.code == .cancelled || error is CancellationError {
+                throw CancellationError()
+            }
             throw APIError.networkUnavailable
         }
 

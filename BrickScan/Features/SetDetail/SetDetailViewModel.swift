@@ -10,12 +10,54 @@ final class SetDetailViewModel {
     var errorMessage: String?
     var toastMessage: String?
 
-    private let repository: RebrickableRepositoryProtocol
+    var storePrice: StorePrice?
+    var storePriceFetchedAt: Date?
+    var isLoadingStorePrice = false
+    var storePriceErrorMessage: String?
 
-    init(legoSet: LegoSet, collectionStatus: CollectionStatus, repository: RebrickableRepositoryProtocol = RebrickableRepository()) {
+    private let repository: RebrickableRepositoryProtocol
+    private let legoStoreRepository: LegoStoreRepositoryProtocol
+
+    init(
+        legoSet: LegoSet,
+        collectionStatus: CollectionStatus,
+        initialListName: String? = nil,
+        initialStorePrice: StorePrice? = nil,
+        initialStorePriceFetchedAt: Date? = nil,
+        repository: RebrickableRepositoryProtocol = RebrickableRepository(),
+        legoStoreRepository: LegoStoreRepositoryProtocol = LegoStoreRepository()
+    ) {
         self.legoSet = legoSet
         self.collectionStatus = collectionStatus
+        self.collectionListName = initialListName
+        self.storePrice = initialStorePrice
+        self.storePriceFetchedAt = initialStorePriceFetchedAt
         self.repository = repository
+        self.legoStoreRepository = legoStoreRepository
+    }
+
+    /// Auto-fetch only when there's no cached price yet, or it's older than `staleAfter` — the
+    /// WKWebView fetch is slow (solves a real Cloudflare challenge, several seconds), so this
+    /// isn't re-run on every SetDetail open the way collection-status reconciliation is.
+    @MainActor
+    func loadStorePriceIfNeeded(staleAfter: TimeInterval = 24 * 60 * 60) async {
+        if let storePriceFetchedAt, Date().timeIntervalSince(storePriceFetchedAt) < staleAfter {
+            return
+        }
+        await refreshStorePrice()
+    }
+
+    @MainActor
+    func refreshStorePrice() async {
+        isLoadingStorePrice = true
+        storePriceErrorMessage = nil
+        defer { isLoadingStorePrice = false }
+        do {
+            storePrice = try await legoStoreRepository.fetchStorePrice(setNum: legoSet.setNum)
+            storePriceFetchedAt = Date()
+        } catch {
+            storePriceErrorMessage = (error as? LocalizedError)?.errorDescription ?? "Prix indisponible"
+        }
     }
 
     var isInCollection: Bool {
@@ -44,6 +86,19 @@ final class SetDetailViewModel {
             self.collectionStatus = .notInCollection
             self.collectionListName = nil
             self.toastMessage = "Set retiré de la collection"
+        }
+    }
+
+    /// Reconciles a cache-displayed status with the live one, without flashing a spinner or
+    /// error UI — if the fetch fails (e.g. offline), keep showing whatever the cache had.
+    @MainActor
+    func silentlyReconcileCollectionStatus() async {
+        do {
+            let userSet = try await repository.fetchUserSet(setNum: legoSet.setNum)
+            collectionStatus = userSet.map(CollectionStatus.inCollection) ?? .notInCollection
+            await refreshCollectionListName()
+        } catch {
+            // Offline or transient failure — the cached status stays on screen.
         }
     }
 

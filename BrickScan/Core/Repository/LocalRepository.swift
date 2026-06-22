@@ -30,18 +30,128 @@ final class LocalRepository {
         try? modelContext.save()
     }
 
+    /// Mirrors ScannerViewModel.state/HomeView's lookupViewModel.state into the cache after a
+    /// resolution completes. Both Scanner and Home drive the same resolve flow, so this is the
+    /// single place that keeps History/Collection in sync — see AGENTS.md "Local SwiftData cache".
+    func cacheFoundState(_ state: ScannerState) {
+        guard case .found(let legoSet, let collectionStatus) = state else { return }
+        let isInCollection: Bool
+        let listId: Int?
+        switch collectionStatus {
+        case .inCollection(let userSet):
+            isInCollection = true
+            listId = userSet.listId
+        case .notInCollection, .unknown:
+            isInCollection = false
+            listId = nil
+        }
+        cacheSet(legoSet, isInCollection: isInCollection, listId: listId, listName: nil)
+    }
+
     func recentlyScannedSets(limit: Int = 50) -> [CachedSet] {
         let descriptor = FetchDescriptor<CachedSet>(
+            predicate: #Predicate { $0.wasScanned },
             sortBy: [SortDescriptor(\.lastScannedAt, order: .reverse)]
         )
         let results = try? modelContext.fetch(descriptor)
         return Array((results ?? []).prefix(limit))
     }
 
+    func scannedSetsCount() -> Int {
+        (try? modelContext.fetchCount(FetchDescriptor<CachedSet>(predicate: #Predicate { $0.wasScanned }))) ?? 0
+    }
+
+    func ownedSets() -> [CachedSet] {
+        let descriptor = FetchDescriptor<CachedSet>(
+            predicate: #Predicate { $0.isInCollection },
+            sortBy: [SortDescriptor(\.name)]
+        )
+        return (try? modelContext.fetch(descriptor)) ?? []
+    }
+
+    func ownedSetsCount() -> Int {
+        (try? modelContext.fetchCount(FetchDescriptor<CachedSet>(predicate: #Predicate { $0.isInCollection }))) ?? 0
+    }
+
     func cachedSet(setNum: String) -> CachedSet? {
         try? modelContext.fetch(
             FetchDescriptor<CachedSet>(predicate: #Predicate { $0.setNum == setNum })
         ).first
+    }
+
+    /// No-ops if no CachedSet row exists yet — the price is only meaningful attached to a set
+    /// already reached through the normal resolve flow (which always caches one first).
+    func cacheStorePrice(setNum: String, price: StorePrice) {
+        guard let existing = cachedSet(setNum: setNum) else { return }
+        existing.storePriceEUR = price.amount
+        existing.storeAvailability = price.availability
+        existing.storePriceFetchedAt = Date()
+        try? modelContext.save()
+    }
+
+    func lastFullSyncAt() -> Date? {
+        (try? modelContext.fetch(FetchDescriptor<CollectionSyncState>()).first)?.lastFullSyncAt
+    }
+
+    /// Full collection sync (offline browsing of owned sets). Distinct from the per-set
+    /// fetchUserSet check (always live) — see AGENTS.md before touching either.
+    func syncCollection(_ userSets: [UserSet], lists: [SetList]) {
+        let listNameById = Dictionary(uniqueKeysWithValues: lists.map { ($0.id, $0.name) })
+
+        // A set owned in multiple lists appears multiple times; keep only the first occurrence
+        // since CachedSet (like the rest of the app) assumes one current list per set.
+        var firstOccurrenceByNum: [String: UserSet] = [:]
+        for userSet in userSets where firstOccurrenceByNum[userSet.setNum] == nil {
+            firstOccurrenceByNum[userSet.setNum] = userSet
+        }
+
+        for (setNum, userSet) in firstOccurrenceByNum {
+            let listName = userSet.listId.flatMap { listNameById[$0] }
+            let existing = try? modelContext.fetch(
+                FetchDescriptor<CachedSet>(predicate: #Predicate { $0.setNum == setNum })
+            ).first
+            if let existing {
+                existing.name = userSet.legoSet.name
+                existing.year = userSet.legoSet.year
+                existing.themeId = userSet.legoSet.themeId
+                existing.numParts = userSet.legoSet.numParts
+                existing.setImgUrl = userSet.legoSet.setImgUrl
+                existing.setUrl = userSet.legoSet.setUrl
+                existing.quantity = userSet.quantity
+                existing.isInCollection = true
+                existing.currentListId = userSet.listId
+                existing.currentListName = listName
+                existing.lastSyncedAt = Date()
+            } else {
+                let cached = CachedSet(from: userSet.legoSet, isInCollection: true, currentListId: userSet.listId, currentListName: listName)
+                cached.wasScanned = false
+                cached.quantity = userSet.quantity
+                cached.lastSyncedAt = Date()
+                modelContext.insert(cached)
+            }
+        }
+
+        let ownedSetNums = Set(firstOccurrenceByNum.keys)
+        let previouslyOwned = (try? modelContext.fetch(
+            FetchDescriptor<CachedSet>(predicate: #Predicate { $0.isInCollection })
+        )) ?? []
+        for cached in previouslyOwned where !ownedSetNums.contains(cached.setNum) {
+            if cached.wasScanned {
+                cached.isInCollection = false
+                cached.currentListId = nil
+                cached.currentListName = nil
+            } else {
+                modelContext.delete(cached)
+            }
+        }
+
+        cacheSetLists(lists)
+        if let syncState = try? modelContext.fetch(FetchDescriptor<CollectionSyncState>()).first {
+            syncState.lastFullSyncAt = Date()
+        } else {
+            modelContext.insert(CollectionSyncState(lastFullSyncAt: Date()))
+        }
+        try? modelContext.save()
     }
 
     func cacheSetLists(_ setLists: [SetList]) {

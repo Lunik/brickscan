@@ -2,7 +2,8 @@ import SwiftUI
 import SwiftData
 
 struct HistoryView: View {
-    @Query(sort: \CachedSet.lastScannedAt, order: .reverse) private var cachedSets: [CachedSet]
+    @Query(filter: #Predicate<CachedSet> { $0.wasScanned }, sort: \CachedSet.lastScannedAt, order: .reverse)
+    private var cachedSets: [CachedSet]
     @Environment(\.dismiss) private var dismiss
     let onSelect: (String) -> Void
 

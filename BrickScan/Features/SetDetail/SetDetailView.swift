@@ -9,9 +9,25 @@ struct SetDetailView: View {
     @Environment(\.modelContext) private var modelContext
 
     let onScanAgain: () -> Void
+    private let reconcileOnAppear: Bool
 
-    init(legoSet: LegoSet, collectionStatus: CollectionStatus, onScanAgain: @escaping () -> Void) {
-        _viewModel = State(initialValue: SetDetailViewModel(legoSet: legoSet, collectionStatus: collectionStatus))
+    init(
+        legoSet: LegoSet,
+        collectionStatus: CollectionStatus,
+        initialListName: String? = nil,
+        initialStorePrice: StorePrice? = nil,
+        initialStorePriceFetchedAt: Date? = nil,
+        reconcileOnAppear: Bool = false,
+        onScanAgain: @escaping () -> Void
+    ) {
+        _viewModel = State(initialValue: SetDetailViewModel(
+            legoSet: legoSet,
+            collectionStatus: collectionStatus,
+            initialListName: initialListName,
+            initialStorePrice: initialStorePrice,
+            initialStorePriceFetchedAt: initialStorePriceFetchedAt
+        ))
+        self.reconcileOnAppear = reconcileOnAppear
         self.onScanAgain = onScanAgain
     }
 
@@ -45,6 +61,8 @@ struct SetDetailView: View {
                     }
 
                     statusBadge
+
+                    storePriceSection
 
                     if viewModel.isLoading {
                         ProgressView()
@@ -101,6 +119,20 @@ struct SetDetailView: View {
         }
         .onChange(of: viewModel.collectionStatus) { _, _ in syncCache() }
         .onChange(of: viewModel.collectionListName) { _, _ in syncCache() }
+        .onChange(of: viewModel.storePriceFetchedAt) { _, _ in syncStorePriceCache() }
+        .task {
+            if reconcileOnAppear {
+                await viewModel.silentlyReconcileCollectionStatus()
+            }
+        }
+        .task {
+            await viewModel.loadStorePriceIfNeeded()
+        }
+    }
+
+    private func syncStorePriceCache() {
+        guard let storePrice = viewModel.storePrice, viewModel.storePriceFetchedAt != nil else { return }
+        LocalRepository(modelContext: modelContext).cacheStorePrice(setNum: viewModel.legoSet.setNum, price: storePrice)
     }
 
     private func syncCache() {
@@ -116,6 +148,52 @@ struct SetDetailView: View {
             listId: listId,
             listName: viewModel.collectionListName
         )
+    }
+
+    @ViewBuilder
+    private var storePriceSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Prix officiel lego.com")
+                    .font(.subheadline.bold())
+                Spacer()
+                Button {
+                    Task { await viewModel.refreshStorePrice() }
+                } label: {
+                    if viewModel.isLoadingStorePrice {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                }
+                .disabled(viewModel.isLoadingStorePrice)
+            }
+
+            if let amount = viewModel.storePrice?.amount {
+                Text(amount, format: .currency(code: viewModel.storePrice?.currency ?? "EUR"))
+                    .font(.title3.bold())
+            } else if viewModel.isLoadingStorePrice {
+                Text("Vérification du prix…")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            } else if let errorMessage = viewModel.storePriceErrorMessage {
+                Text(errorMessage)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            } else if viewModel.storePriceFetchedAt != nil {
+                Text("Retiré de la vente / prix non disponible")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            } else {
+                Text("Pas encore vérifié")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
     @ViewBuilder

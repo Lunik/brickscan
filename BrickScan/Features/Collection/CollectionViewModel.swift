@@ -13,6 +13,6 @@ final class CollectionViewModel {
     }
 
     func load() {
-        cachedSets = localRepository.recentlyScannedSets()
+        cachedSets = localRepository.ownedSets()
     }
 }
