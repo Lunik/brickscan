@@ -40,10 +40,16 @@ final class LegoStoreRepository: NSObject, LegoStoreRepositoryProtocol, @uncheck
     private let pollInterval: UInt64 = 700_000_000
     private let timeout: TimeInterval = 25
 
+    /// The product page URL shown to the user once a price has been confirmed — same path the
+    /// scraper itself loads, so this never drifts from what was actually fetched.
+    static func storeUrl(setNum: String) -> URL? {
+        let productId = setNum.split(separator: "-").first.map(String.init) ?? setNum
+        return URL(string: "https://www.lego.com/fr-fr/product/\(productId)")
+    }
+
     @MainActor
     func fetchStorePrice(setNum: String) async throws -> StorePrice {
-        let productId = setNum.split(separator: "-").first.map(String.init) ?? setNum
-        guard let url = URL(string: "https://www.lego.com/fr-fr/product/\(productId)") else {
+        guard let url = LegoStoreRepository.storeUrl(setNum: setNum) else {
             throw LegoStoreError.pageUnavailable
         }
 

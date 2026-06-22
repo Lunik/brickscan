@@ -73,9 +73,16 @@ struct SetDetailView: View {
 
                     actionButtons
 
-                    if let setUrl = viewModel.legoSet.setUrl, let url = URL(string: setUrl) {
-                        Link("Voir sur Rebrickable", destination: url)
-                            .font(.footnote)
+                    HStack(spacing: 16) {
+                        if let setUrl = viewModel.legoSet.setUrl, let url = URL(string: setUrl) {
+                            Link("Voir sur Rebrickable", destination: url)
+                                .font(.footnote)
+                        }
+                        if viewModel.storePrice?.amount != nil,
+                           let url = LegoStoreRepository.storeUrl(setNum: viewModel.legoSet.setNum) {
+                            Link("Voir sur lego.com", destination: url)
+                                .font(.footnote)
+                        }
                     }
                 }
                 .padding(16)
