@@ -19,6 +19,7 @@ final class LocalRepository {
             existing.year = legoSet.year
             existing.numParts = legoSet.numParts
             existing.setImgUrl = legoSet.setImgUrl
+            existing.setUrl = legoSet.setUrl
             existing.lastScannedAt = Date()
             existing.isInCollection = isInCollection
             existing.currentListId = listId
