@@ -1,5 +1,4 @@
 import AudioToolbox
-import UIKit
 
 enum ScanFeedback {
     // "Tock" — a short, neutral system sound used elsewhere in iOS for
@@ -8,11 +7,5 @@ enum ScanFeedback {
 
     static func playCandidateDetectedSound() {
         AudioServicesPlaySystemSound(candidateDetectedSoundID)
-    }
-
-    private static let minifigFeedbackGenerator = UIImpactFeedbackGenerator(style: .medium)
-
-    static func playMinifigDetectedHaptic() {
-        minifigFeedbackGenerator.impactOccurred()
     }
 }
