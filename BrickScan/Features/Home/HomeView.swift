@@ -58,7 +58,7 @@ struct HomeView: View {
                 }
             }
             .navigationDestination(isPresented: $showCollection) {
-                CollectionView()
+                CollectionView(lookupViewModel: lookupViewModel)
             }
             .sheet(isPresented: $showHistory) {
                 HistoryView(lookupViewModel: lookupViewModel) { setNum in

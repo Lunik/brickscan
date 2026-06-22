@@ -4,23 +4,31 @@ import SwiftData
 struct CollectionView: View {
     @Environment(\.modelContext) private var modelContext
     @State private var viewModel: CollectionViewModel?
+    let lookupViewModel: ScannerViewModel
 
     var body: some View {
         Group {
             if let cachedSets = viewModel?.cachedSets, !cachedSets.isEmpty {
                 List(cachedSets, id: \.setNum) { cached in
-                    HStack(spacing: 14) {
-                        SetThumbnailView(imageUrl: cached.setImgUrl)
+                    Button {
+                        lookupViewModel.lookupSetNumber(cached.setNum)
+                    } label: {
+                        HStack(spacing: 14) {
+                            SetThumbnailView(imageUrl: cached.setImgUrl)
 
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(cached.setNum).font(.headline)
-                            Text(cached.name).font(.subheadline).foregroundStyle(.secondary)
-                            if let listName = cached.currentListName {
-                                Text(listName).font(.caption).foregroundStyle(.tertiary)
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(cached.setNum).font(.headline)
+                                Text(cached.name).font(.subheadline).foregroundStyle(.secondary)
+                                if let listName = cached.currentListName {
+                                    Text(listName).font(.caption).foregroundStyle(.tertiary)
+                                }
                             }
+                            .foregroundStyle(.primary)
                         }
+                        .padding(.vertical, 4)
+                        .contentShape(Rectangle())
                     }
-                    .padding(.vertical, 4)
+                    .buttonStyle(.plain)
                 }
             } else {
                 ContentUnavailableView(
