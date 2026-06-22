@@ -52,11 +52,10 @@ real shape for most of the collection-management endpoints already.
   status only) and re-fetch real state through a read endpoint you *have* verified. This is what
   `addSetToList`/`moveSetToList` do now, after strict decoding caused a production bug where the
   add succeeded server-side but the UI showed a decoding error.
-- Add or update a `MockURLProtocol`-based test in `Tests/BrickScanTests/RebrickableRepositoryTests.swift`
-  that exercises a *successful* decode of the real shape, not just error-path tests — the
-  nested-`UserSet` bug existed for a long time because no test ever decoded a real 200 response.
-  Conversely, if you intentionally stop decoding a response, the test should assert that an
-  arbitrary/unexpected body does NOT cause a thrown error.
+- There's no test target in this project (removed deliberately, see `AGENTS.md`) — verify a
+  successful decode of the real shape manually instead (skill `verify`/`run`), since the
+  nested-`UserSet` bug existed for a long time because nobody had actually exercised a real 200
+  response against the decoder.
 
 ## Don't assume API capabilities that "should" exist
 

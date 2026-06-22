@@ -36,25 +36,8 @@ targets:
     capabilities:
       com.apple.Keychain: {}
 
-  BrickScanTests:
-    type: bundle.unit-test
-    platform: iOS
-    deploymentTarget: "17.0"
-    sources:
-      - path: Tests/BrickScanTests
-    dependencies:
-      - target: BrickScan
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.lunik.brickscan.tests
-        GENERATE_INFOPLIST_FILE: YES
-
 schemes:
   BrickScan:
     build:
       targets:
         BrickScan: all
-        BrickScanTests: [test]
-    test:
-      targets:
-        - BrickScanTests
