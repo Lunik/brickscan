@@ -11,13 +11,16 @@ struct StorePrice: Equatable, Sendable {
 enum LegoStoreError: Error, LocalizedError {
     case timedOut
     case pageUnavailable
+    case setNotOnStore
 
     var errorDescription: String? {
         switch self {
         case .timedOut:
-            return "lego.com n'a pas répondu à temps"
+            return "Prix indisponible (lego.com n'a pas répondu)"
         case .pageUnavailable:
             return "Page lego.com indisponible"
+        case .setNotOnStore:
+            return "Ce set n'est plus sur lego.com"
         }
     }
 }
@@ -45,6 +48,12 @@ final class LegoStoreRepository: NSObject, LegoStoreRepositoryProtocol, @uncheck
         }
 
         let webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        // Tracks the real HTTP status of the page once Cloudflare's challenge resolves and the
+        // browser reloads — distinguishes "this set was removed from lego.com entirely" (404)
+        // from "retired but the page still exists without a price" (handled in extractStorePrice).
+        let statusObserver = StatusCodeObserver()
+        webView.navigationDelegate = statusObserver
+
         // WKWebView has no real "headless" mode on iOS — content reliably loads/executes JS only
         // when the view is actually part of a window. Near-zero alpha keeps it invisible to the
         // user while staying "on screen" enough for the Cloudflare challenge to run normally.
@@ -61,11 +70,30 @@ final class LegoStoreRepository: NSObject, LegoStoreRepositoryProtocol, @uncheck
         while Date() < deadline {
             try await Task.sleep(nanoseconds: pollInterval)
             if webView.isLoading { continue }
+            if statusObserver.lastStatusCode == 404 {
+                throw LegoStoreError.setNotOnStore
+            }
             if let price = try await extractStorePrice(from: webView) {
                 return price
             }
         }
         throw LegoStoreError.timedOut
+    }
+
+    @MainActor
+    private final class StatusCodeObserver: NSObject, WKNavigationDelegate {
+        var lastStatusCode: Int?
+
+        func webView(
+            _ webView: WKWebView,
+            decidePolicyFor navigationResponse: WKNavigationResponse,
+            decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void
+        ) {
+            if let httpResponse = navigationResponse.response as? HTTPURLResponse {
+                lastStatusCode = httpResponse.statusCode
+            }
+            decisionHandler(.allow)
+        }
     }
 
     /// Returns nil while the page hasn't finished rendering real content yet (mid-challenge or
