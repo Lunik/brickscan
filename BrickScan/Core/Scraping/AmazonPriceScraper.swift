@@ -3,12 +3,14 @@ import Foundation
 /// Scrapes an Amazon.fr search results page for a LEGO set's price.
 ///
 /// Amazon has no per-product URL keyed by LEGO set number, so this searches
-/// `LEGO {setNum}` and reads the price off the first result card whose title
-/// contains both "LEGO" and the set number. This is the least reliable price
-/// source in the app (Amazon's anti-bot detection is the most aggressive of
-/// the two): any failure here — CAPTCHA, no matching card, layout change —
-/// is caught by the caller and simply omits the Amazon quote, it never
-/// blocks BrickLink's result.
+/// `LEGO {setNum}` and reads the price off the first result card that looks
+/// like the genuine set: the title is brand-first ("LEGO …"), carries the set
+/// number, and isn't a third-party accessory (lighting kits and the like that
+/// merely say "compatible avec 10294" / "pour LEGO" are rejected). This is the
+/// least reliable price source in the app (Amazon's anti-bot detection is the
+/// most aggressive of the two): any failure here — CAPTCHA, no matching card,
+/// layout change — is caught by the caller and simply omits the Amazon quote,
+/// it never blocks BrickLink's result.
 struct AmazonPriceScraper: Sendable {
     private struct RawResult: Decodable {
         let price: String
@@ -72,10 +74,18 @@ struct AmazonPriceScraper: Sendable {
             var text = document.body ? document.body.innerText : '';
             if (/Enter the characters|Saisissez les caract\\u00e8res/i.test(text)) return null;
             var cards = Array.from(document.querySelectorAll('[data-component-type="s-search-result"]'));
+            // Third-party accessories that merely reference a set number — most
+            // often LED lighting kits "compatible avec"/"pour LEGO", which never
+            // include the set itself.
+            var reject = /compatible|pour lego|for lego|\\u00e9clairage|eclairage|\\bled\\b|lighting|non inclus|not included|pas inclus|sans la|briksmax|vonado|lightailing/i;
             function priceFrom(card) {
                 var titleEl = card.querySelector('h2');
-                var title = titleEl ? titleEl.textContent : '';
-                if (!/lego/i.test(title)) return null;
+                var title = (titleEl ? titleEl.textContent : '').trim();
+                // Genuine listings are brand-first and carry the set number;
+                // accessories are neither.
+                if (!/^lego\\b/i.test(title)) return null;
+                if (title.indexOf('\(setDigits)') === -1) return null;
+                if (reject.test(title)) return null;
                 var priceEl = card.querySelector('.a-price .a-offscreen');
                 if (!priceEl) return null;
                 var linkEl = card.querySelector('h2 a') || card.querySelector('a.a-link-normal');
@@ -85,13 +95,7 @@ struct AmazonPriceScraper: Sendable {
                 });
             }
             for (var i = 0; i < cards.length; i++) {
-                var title = (cards[i].querySelector('h2') || {}).textContent || '';
-                if (title.indexOf('\(setDigits)') === -1) continue;
                 var match = priceFrom(cards[i]);
-                if (match) return match;
-            }
-            for (var j = 0; j < cards.length; j++) {
-                var match = priceFrom(cards[j]);
                 if (match) return match;
             }
             return null;
