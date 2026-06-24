@@ -270,10 +270,11 @@ struct SetDetailView: View {
     }
 
     private func refreshAllPrices() async {
-        // Sequential, not concurrent: the BrickLink/Amazon scrapers and the
-        // lego.com fetch share the single headless WKWebView.
-        await viewModel.refreshStorePrice()
+        // Concurrent: lego.com, BrickLink and Amazon each load on their own web
+        // view, so they fetch in parallel rather than one after another.
+        async let store: Void = viewModel.refreshStorePrice()
         await refreshPrices()
+        await store
     }
 
     private func syncCache() {

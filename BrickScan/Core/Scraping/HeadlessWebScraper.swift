@@ -12,40 +12,25 @@ enum ScrapeError: Error {
     case parsingFailed
 }
 
-/// A single hidden `WKWebView` shared across price scrapers.
+/// Drives hidden `WKWebView`s to scrape sites behind a Cloudflare/bot-detection
+/// JS challenge.
 ///
 /// `URLSession` requests to sites like BrickLink or Amazon get a bare `403`
-/// because they run a Cloudflare/bot-detection JS challenge before serving
-/// the real page. `WKWebView` is a full WebKit engine: it executes that JS
-/// and (for the non-interactive challenges these price pages use) clears it
-/// on its own, same as Safari would. Reusing one instance lets the
-/// `cf_clearance` cookie persist across calls in the same app session,
-/// avoiding the challenge on subsequent requests to the same site.
+/// because they run a JS challenge before serving the real page. `WKWebView` is
+/// a full WebKit engine: it executes that JS and (for the non-interactive
+/// challenges these price pages use) clears it on its own, same as Safari would.
+///
+/// Each `loadAndExtract` call gets its *own* short-lived web view so independent
+/// scrapes (BrickLink, Amazon, …) run truly in parallel — a single shared web
+/// view could only drive one navigation at a time and forced callers to queue.
+/// The web views all share one `WKProcessPool` and the default (persistent)
+/// data store, so the `cf_clearance` cookie still persists across calls to the
+/// same site, avoiding re-solving the challenge.
 @MainActor
-// @unchecked: mutable state (`navigationContinuation`, `isBusy`, `waiters`)
-// is only ever touched on the main actor, so cross-actor passing of the
-// reference itself (e.g. as a struct's stored property) is safe.
-final class HeadlessWebScraper: NSObject, @unchecked Sendable {
+final class HeadlessWebScraper: @unchecked Sendable {
     static let shared = HeadlessWebScraper()
 
-    private let webView: WKWebView
-    private var navigationContinuation: CheckedContinuation<Void, Error>?
-
-    // All scrapers share this one WKWebView, so only one `loadAndExtract`
-    // call may drive it at a time — a second concurrent call would overwrite
-    // `navigationContinuation` before the first one resumes and hang it
-    // forever. Concurrent callers queue here instead of running interleaved.
-    private var isBusy = false
-    private var waiters: [CheckedContinuation<Void, Never>] = []
-
-    override init() {
-        webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 1, height: 1))
-        super.init()
-        webView.navigationDelegate = self
-        // A real iOS Safari UA: some anti-bot checks reject WKWebView's
-        // default UA (which omits "Safari" in its version suffix).
-        webView.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1"
-    }
+    private let processPool = WKProcessPool()
 
     /// Loads `url`, waits until `readinessScript` evaluates truthy (use this
     /// to detect when a Cloudflare-style challenge has cleared and the real
@@ -58,10 +43,44 @@ final class HeadlessWebScraper: NSObject, @unchecked Sendable {
         extractScript: String,
         timeout: TimeInterval = 20
     ) async throws -> String {
-        await acquire()
-        defer { release() }
+        let load = WebViewLoad(processPool: processPool)
+        return try await load.run(
+            url: url,
+            readinessScript: readinessScript,
+            extractScript: extractScript,
+            timeout: timeout
+        )
+    }
+}
 
+/// One page load on a dedicated `WKWebView`. Owns its own navigation
+/// continuation, so any number of these can be in flight at once. The instance
+/// is kept alive for the load's duration by the `await` on `run`.
+@MainActor
+private final class WebViewLoad: NSObject {
+    private let webView: WKWebView
+    private var navigationContinuation: CheckedContinuation<Void, Error>?
+
+    init(processPool: WKProcessPool) {
+        let configuration = WKWebViewConfiguration()
+        configuration.processPool = processPool
+        configuration.websiteDataStore = .default()
+        webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 1, height: 1), configuration: configuration)
+        super.init()
+        webView.navigationDelegate = self
+        // A real iOS Safari UA: some anti-bot checks reject WKWebView's
+        // default UA (which omits "Safari" in its version suffix).
+        webView.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1"
+    }
+
+    func run(
+        url: URL,
+        readinessScript: String,
+        extractScript: String,
+        timeout: TimeInterval
+    ) async throws -> String {
         attachToKeyWindowIfNeeded()
+        defer { webView.removeFromSuperview() }
 
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             navigationContinuation = continuation
@@ -83,28 +102,11 @@ final class HeadlessWebScraper: NSObject, @unchecked Sendable {
         throw ScrapeError.challengeUnsolved
     }
 
-    private func acquire() async {
-        if !isBusy {
-            isBusy = true
-            return
-        }
-        await withCheckedContinuation { waiters.append($0) }
-    }
-
-    private func release() {
-        if let next = waiters.first {
-            waiters.removeFirst()
-            next.resume()
-        } else {
-            isBusy = false
-        }
-    }
-
-    /// The webview must be part of a window for its JS timers (the
-    /// challenge page relies on `setTimeout`/`requestAnimationFrame`) to run
-    /// reliably. It stays effectively invisible: 1x1 and almost transparent
-    /// rather than `isHidden`, since a hidden view can have its rendering
-    /// (and therefore its timers) paused by WebKit.
+    /// The web view must be part of a window for its JS timers (the challenge
+    /// page relies on `setTimeout`/`requestAnimationFrame`) to run reliably. It
+    /// stays effectively invisible: 1x1 and almost transparent rather than
+    /// `isHidden`, since a hidden view can have its rendering (and therefore its
+    /// timers) paused by WebKit.
     private func attachToKeyWindowIfNeeded() {
         guard webView.superview == nil,
               let window = UIApplication.shared.connectedScenes
@@ -117,7 +119,7 @@ final class HeadlessWebScraper: NSObject, @unchecked Sendable {
     }
 }
 
-extension HeadlessWebScraper: WKNavigationDelegate {
+extension WebViewLoad: WKNavigationDelegate {
     nonisolated func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         Task { @MainActor [weak self] in
             self?.navigationContinuation?.resume()
