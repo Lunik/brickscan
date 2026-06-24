@@ -3,11 +3,19 @@ import Foundation
 /// Scrapes the BrickLink "Price Guide" page for a set, which is addressable
 /// directly by set number — no search step needed.
 ///
-/// The JS below walks the DOM by *visible text* ("Used" / "New" block
-/// headers, "Avg Price" row labels) instead of CSS class names, since
-/// BrickLink's markup isn't documented and class names are the first thing
-/// to break on a redesign. If BrickLink changes their wording, this needs
-/// updating — see `BrickLinkPriceScraperTests` for the expected shape.
+/// The page is a deeply nested table with four "Last 6 Months Sales" summary
+/// quadrants (New-sold, Used-sold, New-for-sale, Used-for-sale) followed by a
+/// per-month breakdown. The JS below walks the DOM by *visible row labels*
+/// instead of CSS class names (undocumented, first to break on a redesign).
+///
+/// The reliable anchor is the "Times Sold:" stat row: the New-sold and
+/// Used-sold summary quadrants are the first two such rows on the page and
+/// appear adjacently, before the for-sale quadrants (which carry no
+/// "Times Sold:") and before the monthly detail. For each we read the next
+/// "Avg Price:" value. Matching is done on the *exact* leaf-cell label, so
+/// outer wrapper rows (whose text is the whole quadrant blob) and the
+/// "Qty Avg Price:" row are skipped — that exact-match is what an earlier
+/// adjacency-based walk got wrong, mistakenly returning the "Times Sold" count.
 struct BrickLinkPriceScraper: Sendable {
     private struct RawPrices: Decodable {
         let used: String?
@@ -23,26 +31,34 @@ struct BrickLinkPriceScraper: Sendable {
 
     static let extractScript = """
     (function() {
-        function textOf(el) { return (el.textContent || '').replace(/\\s+/g, ' ').trim(); }
+        function textOf(el) { return (el.textContent || '').replace(/\\u00a0/g, ' ').replace(/\\s+/g, ' ').trim(); }
+        function cellsOf(row) { return Array.from(row.querySelectorAll('td,th')); }
+        // The leaf stat rows are exactly two cells: a label and its value. The
+        // label compares equal only on its own row, never on an outer wrapper
+        // row whose text is the whole quadrant blob.
+        function labelOf(cell) { return textOf(cell).replace(/[:\\s]+$/, '').toLowerCase(); }
         var rows = Array.from(document.querySelectorAll('tr'));
-        function blockStart(label) {
-            return rows.findIndex(function(r) { return new RegExp('^' + label + '$', 'i').test(textOf(r)); });
-        }
-        function avgPriceAfter(startIndex) {
-            if (startIndex < 0) return null;
-            for (var i = startIndex; i < rows.length && i < startIndex + 12; i++) {
-                var cells = Array.from(rows[i].querySelectorAll('td,th'));
-                for (var c = 0; c < cells.length; c++) {
-                    if (/avg price/i.test(textOf(cells[c])) && cells[c + 1]) {
-                        return textOf(cells[c + 1]);
-                    }
-                }
+        // Avg Price of the next sold-summary quadrant after a "Times Sold:" row.
+        var soldAvg = [];
+        for (var i = 0; i < rows.length; i++) {
+            var cells = cellsOf(rows[i]);
+            if (cells.length < 2 || labelOf(cells[0]) !== 'times sold') continue;
+            // A quadrant with no sales has an empty count — skip it so we don't
+            // borrow the next quadrant's Avg Price.
+            if (!/[0-9]/.test(textOf(cells[1]))) { soldAvg.push(null); continue; }
+            var avg = null;
+            for (var j = i + 1; j < rows.length && j < i + 10; j++) {
+                var cj = cellsOf(rows[j]);
+                if (cj.length < 2) continue;
+                var lj = labelOf(cj[0]);
+                if (lj === 'avg price') { avg = textOf(cj[1]); break; }
+                if (lj === 'times sold') break;
             }
-            return null;
+            soldAvg.push(avg);
         }
         return JSON.stringify({
-            used: avgPriceAfter(blockStart('used')),
-            new: avgPriceAfter(blockStart('new'))
+            new: soldAvg[0] || null,
+            used: soldAvg[1] || null
         });
     })()
     """
