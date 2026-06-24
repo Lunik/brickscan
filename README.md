@@ -28,19 +28,23 @@ look up what a set is worth across lego.com, BrickLink and Amazon.
 
 ## Building
 
-The Xcode project is generated from [`project.yml`](project.yml) by XcodeGen —
-**don't edit `BrickScan.xcodeproj` or `Info.plist` by hand**, they're
-regenerated. Edit `project.yml` instead.
+The Xcode project is generated from [`project.yml`](project.yml) by XcodeGen
+and is **not committed** (`BrickScan.xcodeproj` is gitignored) — generate it
+after cloning, and after editing `project.yml`. Never edit the `.xcodeproj` or
+`Info.plist` by hand; they're regenerated.
 
 ```bash
+cp Signing.xcconfig.example Signing.xcconfig   # set your signing identity (see below)
 xcodegen generate
 open BrickScan.xcodeproj
 ```
 
-Before building, set your own signing identity — the committed
-`DEVELOPMENT_TEAM` in `project.yml` is the original author's and won't work for
-you. Either change it to your Apple Developer Team ID or clear it and let Xcode
-manage signing automatically.
+### Signing
+
+Signing lives in `Signing.xcconfig`, which is gitignored so nobody's Apple
+Developer Team ID ends up in the repo. Copy `Signing.xcconfig.example` to
+`Signing.xcconfig` and set `DEVELOPMENT_TEAM` to your own Team ID, or leave it
+empty to let Xcode manage signing automatically.
 
 ### Rebrickable API key
 
