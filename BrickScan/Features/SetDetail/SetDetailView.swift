@@ -59,8 +59,6 @@ struct SetDetailView: View {
 
                     statusBadge
 
-                    storePriceSection
-
                     priceSection
 
                     if viewModel.isLoading {
@@ -153,50 +151,101 @@ struct SetDetailView: View {
         LocalRepository(modelContext: modelContext).cachePrices(viewModel.priceQuotes, setNum: viewModel.legoSet.setNum)
     }
 
-    @ViewBuilder
+    /// Whether any price source is currently being (re)fetched — drives the
+    /// single refresh control's spinner.
+    private var pricesBusy: Bool {
+        viewModel.isLoadingStorePrice || viewModel.pricesLoading
+    }
+
+    /// One card listing every price source — the official lego.com price and
+    /// the scraped BrickLink/Amazon quotes — in a consistent label/value row.
     private var priceSection: some View {
-        if !viewModel.priceQuotes.isEmpty || viewModel.pricesLoading {
-            VStack(spacing: 8) {
-                ForEach(PriceSource.allCases, id: \.self) { source in
-                    if let quote = viewModel.priceQuotes.first(where: { $0.source == source }) {
-                        priceRow(label: source.displayName, quote: quote)
+        VStack(spacing: 10) {
+            HStack {
+                Text("Prix")
+                    .font(.subheadline.bold())
+                Spacer()
+                Button {
+                    Task { await refreshAllPrices() }
+                } label: {
+                    if pricesBusy {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Image(systemName: "arrow.clockwise")
                     }
                 }
+                .disabled(pricesBusy)
+            }
 
-                if viewModel.pricesLoading {
-                    ProgressView().padding(.vertical, 4)
-                } else {
-                    Button("Rafraîchir les prix") {
-                        Task { await refreshPrices() }
+            legoStoreRow
+
+            ForEach(PriceSource.allCases, id: \.self) { source in
+                if let quote = viewModel.priceQuotes.first(where: { $0.source == source }) {
+                    priceRow(label: source.displayName) {
+                        if let sourceURL = quote.sourceURL {
+                            Link(formattedAmount(quote.amount, currency: quote.currency), destination: sourceURL)
+                        } else {
+                            Text(formattedAmount(quote.amount, currency: quote.currency))
+                        }
                     }
-                    .font(.footnote)
+                } else if viewModel.pricesLoading {
+                    priceRow(label: source.displayName) {
+                        Text("…").foregroundStyle(.secondary)
+                    }
                 }
             }
-            .padding(12)
-            .background(Color(.secondarySystemBackground))
-            .clipShape(RoundedRectangle(cornerRadius: 12))
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+
+    @ViewBuilder
+    private var legoStoreRow: some View {
+        priceRow(label: "lego.com (officiel)") {
+            if let amount = viewModel.storePrice?.amount {
+                let code = viewModel.storePrice?.currency ?? "EUR"
+                if let url = LegoStoreRepository.storeUrl(setNum: viewModel.legoSet.setNum) {
+                    Link(formattedAmount(Decimal(amount), currency: code), destination: url)
+                } else {
+                    Text(formattedAmount(Decimal(amount), currency: code))
+                }
+            } else if viewModel.isLoadingStorePrice {
+                Text("Vérification…").foregroundStyle(.secondary)
+            } else if viewModel.storePriceErrorMessage != nil || viewModel.storePriceFetchedAt != nil {
+                Text("Indisponible").foregroundStyle(.secondary)
+            } else {
+                Text("…").foregroundStyle(.secondary)
+            }
         }
     }
 
-    private func priceRow(label: String, quote: PriceQuote) -> some View {
+    private func priceRow<Trailing: View>(
+        label: String,
+        @ViewBuilder trailing: () -> Trailing
+    ) -> some View {
         HStack {
             Text(label)
                 .foregroundStyle(.secondary)
             Spacer()
-            if let sourceURL = quote.sourceURL {
-                Link(formattedAmount(quote), destination: sourceURL)
-            } else {
-                Text(formattedAmount(quote))
-            }
+            trailing()
         }
         .font(.subheadline)
     }
 
-    private func formattedAmount(_ quote: PriceQuote) -> String {
+    private func formattedAmount(_ amount: Decimal, currency: String) -> String {
         let formatter = NumberFormatter()
         formatter.numberStyle = .currency
-        formatter.currencyCode = quote.currency
-        return formatter.string(from: quote.amount as NSDecimalNumber) ?? "\(quote.amount) \(quote.currency)"
+        formatter.currencyCode = currency
+        return formatter.string(from: amount as NSDecimalNumber) ?? "\(amount) \(currency)"
+    }
+
+    private func refreshAllPrices() async {
+        // Sequential, not concurrent: the BrickLink/Amazon scrapers and the
+        // lego.com fetch share the single headless WKWebView.
+        await viewModel.refreshStorePrice()
+        await refreshPrices()
     }
 
     private func syncCache() {
@@ -212,52 +261,6 @@ struct SetDetailView: View {
             listId: listId,
             listName: viewModel.collectionListName
         )
-    }
-
-    @ViewBuilder
-    private var storePriceSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("Prix officiel lego.com")
-                    .font(.subheadline.bold())
-                Spacer()
-                Button {
-                    Task { await viewModel.refreshStorePrice() }
-                } label: {
-                    if viewModel.isLoadingStorePrice {
-                        ProgressView().controlSize(.small)
-                    } else {
-                        Image(systemName: "arrow.clockwise")
-                    }
-                }
-                .disabled(viewModel.isLoadingStorePrice)
-            }
-
-            if let amount = viewModel.storePrice?.amount {
-                Text(amount, format: .currency(code: viewModel.storePrice?.currency ?? "EUR"))
-                    .font(.title3.bold())
-            } else if viewModel.isLoadingStorePrice {
-                Text("Vérification du prix…")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            } else if let errorMessage = viewModel.storePriceErrorMessage {
-                Text(errorMessage)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            } else if viewModel.storePriceFetchedAt != nil {
-                Text("Retiré de la vente / prix non disponible")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            } else {
-                Text("Pas encore vérifié")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
     @ViewBuilder
