@@ -9,13 +9,38 @@ final class SetDetailViewModel {
     var isLoading = false
     var errorMessage: String?
     var toastMessage: String?
+    var priceQuotes: [PriceQuote] = []
+    var pricesLoading = false
 
     private let repository: RebrickableRepositoryProtocol
+    private let priceRepository: PriceRepositoryProtocol
 
-    init(legoSet: LegoSet, collectionStatus: CollectionStatus, repository: RebrickableRepositoryProtocol = RebrickableRepository()) {
+    init(
+        legoSet: LegoSet,
+        collectionStatus: CollectionStatus,
+        repository: RebrickableRepositoryProtocol = RebrickableRepository(),
+        priceRepository: PriceRepositoryProtocol = PriceRepository()
+    ) {
         self.legoSet = legoSet
         self.collectionStatus = collectionStatus
         self.repository = repository
+        self.priceRepository = priceRepository
+    }
+
+    /// Seeds prices from the local cache without hitting the network. Call
+    /// before `loadPrices()` so cached values show up instantly.
+    func setCachedPrices(_ quotes: [PriceQuote]) {
+        priceQuotes = quotes
+    }
+
+    @MainActor
+    func loadPrices() async {
+        pricesLoading = true
+        defer { pricesLoading = false }
+        let quotes = await priceRepository.fetchPrices(for: legoSet)
+        if !quotes.isEmpty {
+            priceQuotes = quotes
+        }
     }
 
     var isInCollection: Bool {
