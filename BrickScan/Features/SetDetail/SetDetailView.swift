@@ -175,26 +175,7 @@ struct SetDetailView: View {
             legoStoreRow
 
             ForEach([PriceSource.amazon, .bricklinkNew, .bricklinkUsed], id: \.self) { source in
-                if let quote = viewModel.priceQuotes.first(where: { $0.source == source }) {
-                    priceRow(label: source.displayName) {
-                        HStack(spacing: 6) {
-                            if let promo = discountVsStore(quote.amount, currency: quote.currency) {
-                                Text(promo.text)
-                                    .font(.caption2)
-                                    .foregroundStyle(promo.color)
-                            }
-                            if let sourceURL = quote.sourceURL {
-                                Link(formattedAmount(quote.amount, currency: quote.currency), destination: sourceURL)
-                            } else {
-                                Text(formattedAmount(quote.amount, currency: quote.currency))
-                            }
-                        }
-                    }
-                } else if viewModel.pricesLoading {
-                    priceRow(label: source.displayName) {
-                        Text("…").foregroundStyle(.secondary)
-                    }
-                }
+                sourceRow(source)
             }
         }
         .padding(12)
@@ -213,13 +194,45 @@ struct SetDetailView: View {
                 } else {
                     Text(formattedAmount(Decimal(amount), currency: code))
                 }
-            } else if viewModel.isLoadingStorePrice {
-                Text("Vérification…").foregroundStyle(.secondary)
-            } else if viewModel.storePriceErrorMessage != nil || viewModel.storePriceFetchedAt != nil {
-                Text("Indisponible").foregroundStyle(.secondary)
             } else {
-                Text("…").foregroundStyle(.secondary)
+                priceStatus(loading: viewModel.isLoadingStorePrice)
             }
+        }
+    }
+
+    /// A scraped-source row. Always rendered so the price list stays the same
+    /// shape across sets — shows the quote, a loading indicator, or
+    /// "Indisponible", consistently with the lego.com row.
+    @ViewBuilder
+    private func sourceRow(_ source: PriceSource) -> some View {
+        priceRow(label: source.displayName) {
+            if let quote = viewModel.priceQuotes.first(where: { $0.source == source }) {
+                HStack(spacing: 6) {
+                    if let promo = discountVsStore(quote.amount, currency: quote.currency) {
+                        Text(promo.text)
+                            .font(.caption2)
+                            .foregroundStyle(promo.color)
+                    }
+                    if let sourceURL = quote.sourceURL {
+                        Link(formattedAmount(quote.amount, currency: quote.currency), destination: sourceURL)
+                    } else {
+                        Text(formattedAmount(quote.amount, currency: quote.currency))
+                    }
+                }
+            } else {
+                priceStatus(loading: viewModel.pricesLoading)
+            }
+        }
+    }
+
+    /// Shared trailing for a row with no value yet: a spinner while its source
+    /// is loading, otherwise "Indisponible" — same in every row.
+    @ViewBuilder
+    private func priceStatus(loading: Bool) -> some View {
+        if loading {
+            ProgressView().controlSize(.small)
+        } else {
+            Text("Indisponible").foregroundStyle(.secondary)
         }
     }
 
