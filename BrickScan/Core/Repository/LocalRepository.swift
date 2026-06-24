@@ -185,6 +185,9 @@ final class LocalRepository {
         if let prices = try? modelContext.fetch(FetchDescriptor<CachedSetPrice>()) {
             prices.forEach { modelContext.delete($0) }
         }
+        if let syncStates = try? modelContext.fetch(FetchDescriptor<CollectionSyncState>()) {
+            syncStates.forEach { modelContext.delete($0) }
+        }
         try? modelContext.save()
     }
 

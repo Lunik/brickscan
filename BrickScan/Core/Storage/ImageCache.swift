@@ -32,6 +32,13 @@ actor ImageCache {
         return data
     }
 
+    /// Deletes every cached image. The directory is recreated so subsequent
+    /// writes still land somewhere.
+    func clearAll() {
+        try? FileManager.default.removeItem(at: directory)
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    }
+
     private func fileURL(for url: URL) -> URL {
         let safeName = url.absoluteString.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? url.absoluteString
         return directory.appendingPathComponent(safeName)

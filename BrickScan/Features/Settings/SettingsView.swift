@@ -4,6 +4,10 @@ struct SettingsView: View {
     @State private var viewModel = SettingsViewModel()
     @State private var showPrivacyDetail = false
     @State private var isAPIKeyVisible = false
+    @State private var showClearCacheConfirmation = false
+    @State private var isClearingCache = false
+    @State private var cacheCleared = false
+    @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -80,6 +84,26 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    Button(role: .destructive) {
+                        showClearCacheConfirmation = true
+                    } label: {
+                        HStack {
+                            Text("Vider le cache")
+                            Spacer()
+                            if isClearingCache {
+                                ProgressView()
+                            } else if cacheCleared {
+                                Image(systemName: "checkmark")
+                                    .foregroundStyle(.green)
+                            }
+                        }
+                    }
+                    .disabled(isClearingCache)
+                } footer: {
+                    Text("Supprime les images, prix et listes mis en cache. Ne touche pas à votre clé API ni à votre compte ; les données seront re-téléchargées au besoin.")
+                }
+
+                Section {
                     Button("Confidentialité & données") {
                         showPrivacyDetail = true
                     }
@@ -101,6 +125,27 @@ struct SettingsView: View {
             .sheet(isPresented: $showPrivacyDetail) {
                 PrivacyDetailView()
             }
+            .confirmationDialog(
+                "Vider le cache ?",
+                isPresented: $showClearCacheConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Vider le cache", role: .destructive) {
+                    Task { await clearCache() }
+                }
+                Button("Annuler", role: .cancel) {}
+            } message: {
+                Text("Supprime les images, prix et listes mis en cache. Votre clé API et votre compte sont conservés.")
+            }
         }
+    }
+
+    private func clearCache() async {
+        isClearingCache = true
+        cacheCleared = false
+        LocalRepository(modelContext: modelContext).clearAll()
+        await ImageCache.shared.clearAll()
+        isClearingCache = false
+        cacheCleared = true
     }
 }
