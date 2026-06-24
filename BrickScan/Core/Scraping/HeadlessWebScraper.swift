@@ -40,7 +40,9 @@ final class HeadlessWebScraper: NSObject {
     private var isBusy = false
     private var waiters: [CheckedContinuation<Void, Never>] = []
 
-    override init() {
+    // Nonisolated so `static let shared`'s initializer (itself nonisolated,
+    // per the annotation above) can call it without needing MainActor.
+    nonisolated override init() {
         webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 1, height: 1))
         super.init()
         webView.navigationDelegate = self
