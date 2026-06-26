@@ -39,6 +39,10 @@ final class ScannerViewModel {
     /// True when the current `.found` state was served from the local cache (instant display)
     /// rather than a fresh fetch — lets the presenting view know to silently reconcile it live.
     var lastFoundWasFromCache = false
+    /// True when the current `.found` state came from `OfflineCatalogStore` (the bundled catalogue
+    /// snapshot) because the live lookup failed for lack of network — collection status and prices
+    /// are not in that snapshot, so the presenting view should flag them as needing a refresh.
+    var lastFoundWasOffline = false
 
     var localRepository: LocalRepository?
     /// HomeView reuses this class for its non-camera lookup flows (History tap, manual entry,
@@ -192,9 +196,11 @@ final class ScannerViewModel {
 
         if let cached = localRepository?.cachedSet(setNum: setNum) {
             lastFoundWasFromCache = true
+            lastFoundWasOffline = false
             state = .found(cached.asLegoSet(), cached.asCollectionStatus())
         } else {
             lastFoundWasFromCache = false
+            lastFoundWasOffline = false
             state = .processing
         }
         if playsFeedbackSounds {
@@ -219,7 +225,16 @@ final class ScannerViewModel {
             }
         } catch {
             if !lastFoundWasFromCache {
-                state = .error((error as? APIError)?.errorDescription ?? "Erreur inconnue")
+                if case .networkUnavailable = error as? APIError,
+                   let offlineSet = OfflineCatalogStore.shared.lookup(setNum: setNum) {
+                    lastFoundWasOffline = true
+                    state = .found(
+                        offlineSet,
+                        .unknown("Hors-ligne — statut collection et prix à rafraîchir une fois reconnecté")
+                    )
+                } else {
+                    state = .error((error as? APIError)?.errorDescription ?? "Erreur inconnue")
+                }
                 isPaused = false
             }
         }

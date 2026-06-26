@@ -214,6 +214,27 @@ Two different things, don't conflate them:
   hero image uses `refreshesLive: true` — same cache-first-then-reconcile behavior as collection
   status, since that's the "did I refresh on open" point for everything else on that screen.
 
+## Offline catalogue fallback (scanning with no network)
+
+`OfflineCatalogStore` (`Core/Storage/OfflineCatalogStore.swift`) loads a bundled, build-time
+snapshot (`BrickScan/Resources/OfflineCatalogSnapshot.json`) of `set_num → name/year/theme_id/
+num_parts/set_img_url` so basic identification still works with zero network — the typical
+scanning scenario (in-store, poor reception) where a never-before-seen set would otherwise fail
+outright. `ScannerViewModel.resolveSet`'s `catch` block falls back to it *only* on
+`APIError.networkUnavailable` (not on auth/server errors, which aren't a connectivity problem and
+shouldn't be silently masked), and only when there's no existing `CachedSet` hit already being
+shown (`lastFoundWasFromCache`). It sets `lastFoundWasOffline = true` and surfaces the result via
+the existing `CollectionStatus.unknown(...)` UI path (retry button included) rather than a new one
+— `SetDetailView` additionally shows a small "Résultat hors-ligne" label when `isOfflineResult` is
+threaded through to it. Collection status and live prices are deliberately **not** in the
+snapshot — same "catalog facts are static, collection status isn't" split as the rest of the app.
+
+The committed `OfflineCatalogSnapshot.json` is a tiny, hand-picked placeholder (a handful of
+well-known sets), not a real catalogue dump — regenerate it for real with
+`Scripts/generate_offline_catalog_snapshot.py` (downloads Rebrickable's public, unauthenticated
+`sets.csv.gz`; see the script's docstring) before relying on this feature in production, and check
+the resulting bundle size first.
+
 ## Code signing — never put a team ID in tracked files
 
 `DEVELOPMENT_TEAM` lives **only** in `Signing.xcconfig`, which is gitignored. `project.yml`
