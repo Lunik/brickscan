@@ -182,6 +182,10 @@ final class LocalRepository {
         (try? modelContext.fetch(FetchDescriptor<CachedSetList>())) ?? []
     }
 
+    /// Deliberately does NOT touch `PriceHistoryEntry` — the price-evolution chart in
+    /// `SetDetail` is the whole point of recording it over time, and "vider le cache"
+    /// is meant to discard reconstructible short-TTL data (cached sets/lists/current
+    /// prices), not a history the app can't get back by re-fetching.
     func clearAll() {
         if let sets = try? modelContext.fetch(FetchDescriptor<CachedSet>()) {
             sets.forEach { modelContext.delete($0) }
@@ -191,9 +195,6 @@ final class LocalRepository {
         }
         if let prices = try? modelContext.fetch(FetchDescriptor<CachedSetPrice>()) {
             prices.forEach { modelContext.delete($0) }
-        }
-        if let history = try? modelContext.fetch(FetchDescriptor<PriceHistoryEntry>()) {
-            history.forEach { modelContext.delete($0) }
         }
         if let syncStates = try? modelContext.fetch(FetchDescriptor<CollectionSyncState>()) {
             syncStates.forEach { modelContext.delete($0) }

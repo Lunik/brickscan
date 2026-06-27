@@ -101,7 +101,7 @@ struct SettingsView: View {
                     }
                     .disabled(isClearingCache)
                 } footer: {
-                    Text("Supprime les images, prix et listes mis en cache. Ne touche pas à votre clé API ni à votre compte ; les données seront re-téléchargées au besoin.")
+                    Text("Supprime les images, prix et listes mis en cache. Ne touche pas à votre clé API ni à votre compte, ni à l'historique des prix ; les données seront re-téléchargées au besoin.")
                 }
 
                 Section {
@@ -211,7 +211,7 @@ struct SettingsView: View {
                 }
                 Button("Annuler", role: .cancel) {}
             } message: {
-                Text("Supprime les images, prix et listes mis en cache. Votre clé API et votre compte sont conservés.")
+                Text("Supprime les images, prix et listes mis en cache. Votre clé API, votre compte et l'historique des prix sont conservés.")
             }
             .onChange(of: scenePhase) { _, newPhase in
                 viewModel.handleScenePhaseChange(isActive: newPhase == .active)
