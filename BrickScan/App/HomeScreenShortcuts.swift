@@ -1,5 +1,6 @@
 import UIKit
 import Observation
+import UserNotifications
 
 /// Routes a Home Screen Quick Action (long-press on the app icon) to the entry point it mirrors.
 enum HomeScreenShortcut: String {
@@ -23,6 +24,17 @@ final class ShortcutCenter {
 /// SwiftUI's `App` protocol has no hook for `UIApplicationShortcutItem`s, so a minimal
 /// `UIApplicationDelegate` captures both delivery paths.
 final class AppDelegate: NSObject, UIApplicationDelegate {
+    // Wires up notification delegation once at launch so `PriceUpdateNotifier`'s completion
+    // notification still shows a banner if the batch finishes while the app is foreground —
+    // by default iOS suppresses foreground banners unless a delegate opts in via `willPresent`.
+    func application(
+        _ application: UIApplication,
+        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
+    ) -> Bool {
+        UNUserNotificationCenter.current().delegate = self
+        return true
+    }
+
     // Cold launch: even without a custom Info.plist scene manifest, UIKit launches SwiftUI apps
     // through the scene-connection path — `application(_:didFinishLaunchingWithOptions:)`'s
     // `.shortcutItem` launch option is never populated here, only
@@ -53,5 +65,15 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         Task { @MainActor in
             ShortcutCenter.shared.pendingShortcut = shortcut
         }
+    }
+}
+
+extension AppDelegate: UNUserNotificationCenterDelegate {
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        completionHandler([.banner, .sound, .list])
     }
 }
