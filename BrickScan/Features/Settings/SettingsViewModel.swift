@@ -46,13 +46,14 @@ final class SettingsViewModel {
 
     // MARK: - Collection price batch update
 
-    /// These four forward to `CollectionPriceUpdater.shared` (rather than mirroring its state
+    /// These five forward to `CollectionPriceUpdater.shared` (rather than mirroring its state
     /// into local properties) so progress stays live even if `SettingsView` is dismissed and
     /// reopened mid-run — the singleton, not this view model, owns the actual job.
     @MainActor var isUpdatingAllPrices: Bool { CollectionPriceUpdater.shared.isRunning }
     @MainActor var priceUpdateDone: Int { CollectionPriceUpdater.shared.done }
     @MainActor var priceUpdateTotal: Int { CollectionPriceUpdater.shared.total }
     @MainActor var hasResumablePriceUpdate: Bool { CollectionPriceUpdater.shared.hasResumableUpdate }
+    @MainActor var priceUpdateLastCompletedAt: Date? { CollectionPriceUpdater.shared.lastCompletedAt }
 
     @MainActor
     func updateAllPrices(modelContext: ModelContext) async {

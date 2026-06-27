@@ -26,9 +26,15 @@ final class CollectionPriceUpdater {
     private(set) var isRunning = false
     private(set) var done = 0
     private(set) var total = 0
+    /// When the last full pass over the collection finished — `nil` until the first one ever
+    /// completes. Only set on a natural completion (empty queue), never on a pause, so it
+    /// always reflects "the last time every set actually got refreshed", not the last attempt.
+    private(set) var lastCompletedAt: Date?
 
     private let queueURL: URL
     private var cancelRequested = false
+
+    private static let lastCompletedAtDefaultsKey = "CollectionPriceUpdateLastCompletedAt"
 
     private struct Queue: Codable {
         var remaining: [LegoSet]
@@ -43,6 +49,7 @@ final class CollectionPriceUpdater {
             self.total = queue.total
             self.done = queue.total - queue.remaining.count
         }
+        self.lastCompletedAt = UserDefaults.standard.object(forKey: Self.lastCompletedAtDefaultsKey) as? Date
     }
 
     var hasResumableUpdate: Bool {
@@ -150,6 +157,8 @@ final class CollectionPriceUpdater {
         try? FileManager.default.removeItem(at: queueURL)
         total = 0
         done = 0
+        lastCompletedAt = Date()
+        UserDefaults.standard.set(lastCompletedAt, forKey: Self.lastCompletedAtDefaultsKey)
     }
 
     private static func loadQueue(at url: URL) -> Queue? {

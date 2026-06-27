@@ -154,6 +154,11 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    if let lastCompletedAt = viewModel.priceUpdateLastCompletedAt {
+                        Text("Dernière actualisation : \(lastCompletedAt.formatted(date: .abbreviated, time: .shortened))")
+                            .foregroundStyle(.secondary)
+                    }
+
                     if viewModel.isUpdatingAllPrices {
                         ProgressView(value: Double(viewModel.priceUpdateDone), total: Double(max(viewModel.priceUpdateTotal, 1)))
                     }
