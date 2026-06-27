@@ -4,6 +4,7 @@ import SwiftData
 struct CollectionView: View {
     @Environment(\.modelContext) private var modelContext
     @State private var viewModel: CollectionViewModel?
+    @State private var showStatistics = false
     let lookupViewModel: ScannerViewModel
 
     var body: some View {
@@ -41,6 +42,18 @@ struct CollectionView: View {
             }
         }
         .navigationTitle("Ma collection")
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    showStatistics = true
+                } label: {
+                    Image(systemName: "chart.bar")
+                }
+            }
+        }
+        .navigationDestination(isPresented: $showStatistics) {
+            StatisticsView(lookupViewModel: lookupViewModel)
+        }
         .onAppear {
             if viewModel == nil {
                 viewModel = CollectionViewModel(localRepository: LocalRepository(modelContext: modelContext))
