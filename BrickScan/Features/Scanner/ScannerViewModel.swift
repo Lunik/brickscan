@@ -1,6 +1,7 @@
 import Foundation
 import AVFoundation
 import Observation
+import UIKit
 
 enum ScannerState: Equatable {
     case scanning
@@ -36,6 +37,13 @@ final class ScannerViewModel {
     var state: ScannerState = .scanning
     var torchOn = false
     var candidateDetected = false
+    /// A crop of the reticle region captured the moment a candidate is detected — lets the
+    /// overlay show "this is what got scanned" before the network result comes back. Captured
+    /// once per candidate (see `scheduleResolution`), cleared on `resumeScanning` — see #32.
+    var candidateThumbnail: UIImage?
+    /// The on-screen reticle size, shared with `ScanOverlayView` and the Vision region of
+    /// interest / thumbnail crop, so "what's aimed at" and "what's detected" always agree.
+    static let reticleSize = CGSize(width: 280, height: 180)
     /// True when the current `.found` state was served from the local cache (instant display)
     /// rather than a fresh fetch — lets the presenting view know to silently reconcile it live.
     var lastFoundWasFromCache = false
@@ -115,6 +123,7 @@ final class ScannerViewModel {
         state = .scanning
         isPaused = false
         candidateDetected = false
+        candidateThumbnail = nil
     }
 
     func lookupSetNumber(_ setNum: String) {
@@ -177,7 +186,7 @@ final class ScannerViewModel {
         isPaused = true
         state = .processing
 
-        barcodeScanner.detectBarcode(in: cgImage) { [weak self] barcodeValue in
+        barcodeScanner.detectBarcode(in: cgImage) { [weak self] barcodeValue, _ in
             Task { @MainActor in
                 if let barcodeValue {
                     let candidate = SetNumberExtractor.extractFromBarcode(barcodeValue)
@@ -209,27 +218,40 @@ final class ScannerViewModel {
         }
         lastFrameProcessedAt = Date()
 
-        barcodeScanner.detectBarcode(in: pixelBuffer) { [weak self] barcodeValue in
+        // Detect on a crop of just the reticle, rather than the full frame with a Vision
+        // `regionOfInterest` — restricts "what's detected" to "what's aimed at", and any
+        // resulting bounding box is then unambiguously relative to this same small image (see
+        // `CameraController.croppedReticleImage`).
+        guard let reticleImage = cameraController.croppedReticleImage(from: pixelBuffer, reticleSize: Self.reticleSize) else {
+            return
+        }
+
+        barcodeScanner.detectBarcode(in: reticleImage) { [weak self] barcodeValue, boundingBox in
             if let barcodeValue {
                 let candidate = SetNumberExtractor.extractFromBarcode(barcodeValue)
-                self?.scheduleResolution(for: candidate)
+                self?.scheduleResolution(for: candidate, reticleImage: reticleImage, detectionBox: boundingBox)
                 return
             }
 
-            self?.ocrScanner.recognizeText(in: pixelBuffer) { texts in
-                let candidates = SetNumberExtractor.extractFromOCR(texts)
+            self?.ocrScanner.recognizeTextWithBoundingBoxes(in: reticleImage) { observations in
+                let candidates = SetNumberExtractor.extractFromOCR(observations)
                 if let first = candidates.first {
-                    self?.scheduleResolution(for: first)
+                    self?.scheduleResolution(for: first.setNum, reticleImage: reticleImage, detectionBox: first.boundingBox)
                 }
             }
         }
     }
 
-    private func scheduleResolution(for setNum: String) {
+    private func scheduleResolution(for setNum: String, reticleImage: CGImage, detectionBox: CGRect?) {
         if let lastDate = recentlyIdentifiedAt[setNum], Date().timeIntervalSince(lastDate) < 30 {
             return
         }
 
+        // Capture the thumbnail once per candidate, not on every throttled frame while its
+        // debounce is pending.
+        if !candidateDetected {
+            candidateThumbnail = cameraController.zoomedThumbnail(in: reticleImage, detectionBox: detectionBox)
+        }
         candidateDetected = true
         debounceTasks[setNum]?.cancel()
         // Offline, there's no network round-trip to debounce against — resolving immediately

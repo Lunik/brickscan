@@ -3,6 +3,7 @@ import SwiftUI
 struct ScanOverlayView: View {
     let state: ScannerState
     var candidateDetected: Bool = false
+    var candidateThumbnail: UIImage? = nil
 
     private var frameColor: Color {
         switch state {
@@ -52,7 +53,7 @@ struct ScanOverlayView: View {
 
             RoundedRectangle(cornerRadius: 12)
                 .strokeBorder(frameColor, lineWidth: candidateDetected ? 5 : 3)
-                .frame(width: 280, height: 180)
+                .frame(width: ScannerViewModel.reticleSize.width, height: ScannerViewModel.reticleSize.height)
                 .scaleEffect(candidateDetected && state == .scanning ? 1.04 : 1)
                 .animation(.easeInOut(duration: 0.4).repeatForever(autoreverses: true), value: candidateDetected)
                 .overlay {
@@ -63,6 +64,22 @@ struct ScanOverlayView: View {
                         Image(systemName: "checkmark.circle.fill")
                             .font(.system(size: 36))
                             .foregroundStyle(.green)
+                    }
+                }
+                .overlay(alignment: .topTrailing) {
+                    if let candidateThumbnail, candidateDetected || state == .processing {
+                        // .fit (not .fill) inside a bounding box, not a fixed frame, so the
+                        // thumbnail keeps the actual aspect ratio of the captured zone — a wide
+                        // barcode and a squarer text crop shouldn't both get stretched the same way.
+                        Image(uiImage: candidateThumbnail)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(maxWidth: 110, maxHeight: 70)
+                            .fixedSize()
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                            .shadow(radius: 3)
+                            .offset(x: 12, y: -12)
+                            .transition(.scale.combined(with: .opacity))
                     }
                 }
 
