@@ -65,9 +65,15 @@ final class ScannerViewModel {
     private let ocrScanner = OCRScanner()
     private let repository: RebrickableRepositoryProtocol
 
-    private var lastIdentifiedSetNum: String?
-    private var lastIdentifiedAt: Date?
-    private var debounceTask: Task<Void, Never>?
+    /// When each set number was last resolved, for the 30s anti-repeat lock. Keyed per set number
+    /// (not a single scalar) so identifying box A doesn't reset the clock that's protecting box B
+    /// — see `scheduleResolution`.
+    private var recentlyIdentifiedAt: [String: Date] = [:]
+    /// One pending debounce per set number currently in frame, keyed the same way — a single
+    /// shared task would mean pointing the camera at a second box within the 1.5s debounce window
+    /// cancels the first box's pending resolution, which made batch mode unusable for scanning
+    /// several boxes in quick succession (see issue #13 follow-up).
+    private var debounceTasks: [String: Task<Void, Never>] = [:]
     private var isPaused = false
 
     private var lastFrameProcessedAt: Date?
@@ -112,7 +118,7 @@ final class ScannerViewModel {
     }
 
     func lookupSetNumber(_ setNum: String) {
-        debounceTask?.cancel()
+        cancelAllDebounceTasks()
         isPaused = true
         Task {
             await resolveSet(setNum)
@@ -167,7 +173,7 @@ final class ScannerViewModel {
     }
 
     func importImage(_ cgImage: CGImage) {
-        debounceTask?.cancel()
+        cancelAllDebounceTasks()
         isPaused = true
         state = .processing
 
@@ -220,27 +226,30 @@ final class ScannerViewModel {
     }
 
     private func scheduleResolution(for setNum: String) {
-        if setNum == lastIdentifiedSetNum,
-           let lastDate = lastIdentifiedAt,
-           Date().timeIntervalSince(lastDate) < 30 {
+        if let lastDate = recentlyIdentifiedAt[setNum], Date().timeIntervalSince(lastDate) < 30 {
             return
         }
 
         candidateDetected = true
-        debounceTask?.cancel()
-        debounceTask = Task { [weak self] in
+        debounceTasks[setNum]?.cancel()
+        debounceTasks[setNum] = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 1_500_000_000)
             guard !Task.isCancelled else { return }
+            self?.debounceTasks[setNum] = nil
             await self?.resolveSet(setNum)
         }
+    }
+
+    private func cancelAllDebounceTasks() {
+        debounceTasks.values.forEach { $0.cancel() }
+        debounceTasks.removeAll()
     }
 
     /// Lifts the 30s anti-repeat lock set at the start of `resolveSet` — only called on a
     /// terminal failure (not found / error), where there's nothing on screen worth protecting
     /// from being immediately re-triggered, unlike a successful `.found`/offline match.
-    private func clearIdentificationLock() {
-        lastIdentifiedSetNum = nil
-        lastIdentifiedAt = nil
+    private func clearIdentificationLock(for setNum: String) {
+        recentlyIdentifiedAt[setNum] = nil
     }
 
     @MainActor
@@ -253,8 +262,7 @@ final class ScannerViewModel {
         // exactly as before, since there's only ever one in-flight resolution to wait on then.
         let isBatchCapturing = isBatchModeEnabled && !bypassBatch
 
-        lastIdentifiedSetNum = setNum
-        lastIdentifiedAt = Date()
+        recentlyIdentifiedAt[setNum] = Date()
         if !isBatchCapturing {
             isPaused = true
         }
@@ -291,7 +299,7 @@ final class ScannerViewModel {
                     )
                 } else if !isBatchCapturing {
                     state = .error(APIError.networkUnavailable.errorDescription ?? "Erreur inconnue")
-                    clearIdentificationLock()
+                    clearIdentificationLock(for: setNum)
                 }
                 if !isBatchCapturing {
                     isPaused = false
@@ -323,7 +331,7 @@ final class ScannerViewModel {
                     // "Set non trouvé" isn't a reason to lock this set number out for 30s like a
                     // successful identification — the user is told to rescan right away, so let
                     // them, including rescanning the exact same box (e.g. after repositioning it).
-                    clearIdentificationLock()
+                    clearIdentificationLock(for: setNum)
                 }
             }
         } catch {
@@ -338,7 +346,7 @@ final class ScannerViewModel {
                     )
                 } else if !isBatchCapturing {
                     state = .error((error as? APIError)?.errorDescription ?? "Erreur inconnue")
-                    clearIdentificationLock()
+                    clearIdentificationLock(for: setNum)
                 }
                 if !isBatchCapturing {
                     isPaused = false
