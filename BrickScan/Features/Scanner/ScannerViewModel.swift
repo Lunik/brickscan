@@ -141,8 +141,22 @@ final class ScannerViewModel {
     /// `bypassBatch` is captured once per `resolveSet`/`selectAmbiguousSet` call (not re-read from
     /// `forceDetailNextResolution` on every call) so a live reconcile after a cache-instant display
     /// doesn't flip back to batch-capture mid-flow and yank the just-opened detail sheet away.
-    private func presentFound(_ legoSet: LegoSet, _ collectionStatus: CollectionStatus, bypassBatch: Bool) {
+    ///
+    /// `wasFromCache`/`wasOffline` are only written to the published `lastFoundWas...` flags on the
+    /// non-batch branch: while batch-capturing, several resolutions can be in flight concurrently
+    /// (see `resolveSet`), and those flags are only meaningful right before a detail sheet reads
+    /// them — writing them here for every batch item would let an unrelated in-flight scan's value
+    /// win the race and corrupt the one sheet that's actually about to open.
+    private func presentFound(
+        _ legoSet: LegoSet,
+        _ collectionStatus: CollectionStatus,
+        bypassBatch: Bool,
+        wasFromCache: Bool = false,
+        wasOffline: Bool = false
+    ) {
         guard isBatchModeEnabled, !bypassBatch else {
+            lastFoundWasFromCache = wasFromCache
+            lastFoundWasOffline = wasOffline
             state = .found(legoSet, collectionStatus)
             return
         }
@@ -225,20 +239,29 @@ final class ScannerViewModel {
     private func resolveSet(_ setNum: String) async {
         let bypassBatch = forceDetailNextResolution
         forceDetailNextResolution = false
+        // While batch-capturing, identification of one box must not hold up the next: don't pause
+        // frame processing for it, so several boxes can resolve concurrently in the background.
+        // Outside batch mode (or when explicitly opening a detail sheet) the camera still pauses
+        // exactly as before, since there's only ever one in-flight resolution to wait on then.
+        let isBatchCapturing = isBatchModeEnabled && !bypassBatch
 
         lastIdentifiedSetNum = setNum
         lastIdentifiedAt = Date()
-        isPaused = true
+        if !isBatchCapturing {
+            isPaused = true
+        }
         candidateDetected = false
         ScanStatsStore.shared.recordScan()
 
+        // Local to this resolution — not written to the published `lastFoundWas...` flags until
+        // `presentFound` decides this is the one opening a detail sheet (see its doc comment).
+        var foundWasFromCache = false
+        var foundWasOffline = false
+
         if let cached = localRepository?.cachedSet(setNum: setNum) {
-            lastFoundWasFromCache = true
-            lastFoundWasOffline = false
-            presentFound(cached.asLegoSet(), cached.asCollectionStatus(), bypassBatch: bypassBatch)
-        } else {
-            lastFoundWasFromCache = false
-            lastFoundWasOffline = false
+            foundWasFromCache = true
+            presentFound(cached.asLegoSet(), cached.asCollectionStatus(), bypassBatch: bypassBatch, wasFromCache: true)
+        } else if !isBatchCapturing {
             state = .processing
         }
         if playsFeedbackSounds {
@@ -249,18 +272,21 @@ final class ScannerViewModel {
         // offline — fall straight to the same offline-catalogue path the `catch` block below uses
         // for an actual `APIError.networkUnavailable`, instead of waiting to fail first.
         guard NetworkMonitor.shared.isConnected else {
-            if !lastFoundWasFromCache {
+            if !foundWasFromCache {
                 if let offlineSet = OfflineCatalogStore.shared.lookup(setNum: setNum) {
-                    lastFoundWasOffline = true
+                    foundWasOffline = true
                     presentFound(
                         offlineSet,
                         .unknown("Hors-ligne — statut collection et prix à rafraîchir une fois reconnecté"),
-                        bypassBatch: bypassBatch
+                        bypassBatch: bypassBatch,
+                        wasOffline: true
                     )
-                } else {
+                } else if !isBatchCapturing {
                     state = .error(APIError.networkUnavailable.errorDescription ?? "Erreur inconnue")
                 }
-                isPaused = false
+                if !isBatchCapturing {
+                    isPaused = false
+                }
             }
             return
         }
@@ -269,32 +295,40 @@ final class ScannerViewModel {
             let resolution = try await repository.resolveSet(setNum: setNum)
             switch resolution {
             case .found(let legoSet):
-                presentFound(legoSet, await fetchCollectionStatus(for: legoSet.setNum), bypassBatch: bypassBatch)
+                presentFound(
+                    legoSet,
+                    await fetchCollectionStatus(for: legoSet.setNum),
+                    bypassBatch: bypassBatch,
+                    wasFromCache: foundWasFromCache,
+                    wasOffline: foundWasOffline
+                )
             case .ambiguous(let sets):
                 state = .ambiguous(sets)
             case .notFound:
                 // Some cached numbers (e.g. minifigs, "fig-…") can't be re-resolved through the
                 // sets endpoint at all — don't let a live reconcile failure close a detail view
                 // that was already showing valid cached data; just keep it as-is.
-                if !lastFoundWasFromCache {
+                if !foundWasFromCache, !isBatchCapturing {
                     state = .notFound
                     isPaused = false
                 }
             }
         } catch {
-            if !lastFoundWasFromCache {
+            if !foundWasFromCache {
                 if case .networkUnavailable = error as? APIError,
                    let offlineSet = OfflineCatalogStore.shared.lookup(setNum: setNum) {
-                    lastFoundWasOffline = true
                     presentFound(
                         offlineSet,
                         .unknown("Hors-ligne — statut collection et prix à rafraîchir une fois reconnecté"),
-                        bypassBatch: bypassBatch
+                        bypassBatch: bypassBatch,
+                        wasOffline: true
                     )
-                } else {
+                } else if !isBatchCapturing {
                     state = .error((error as? APIError)?.errorDescription ?? "Erreur inconnue")
                 }
-                isPaused = false
+                if !isBatchCapturing {
+                    isPaused = false
+                }
             }
         }
     }
