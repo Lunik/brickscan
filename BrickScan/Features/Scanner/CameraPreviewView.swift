@@ -119,7 +119,10 @@ final class CameraController: NSObject, AVCaptureVideoDataOutputSampleBufferDele
     /// region Vision detected within it, padded a little since a tight bounding box often clips
     /// its own edges. Falls back to the unzoomed reticle image when there's no detection box yet.
     func zoomedThumbnail(in reticleImage: CGImage, detectionBox: CGRect?) -> UIImage {
-        guard let detectionBox else { return UIImage(cgImage: reticleImage) }
+        // The pixel buffer is delivered in the camera sensor's native landscape orientation — we
+        // never rotate it via the capture connection — so it needs a quarter turn to read upright
+        // against the portrait preview. `.right` tells UIImage to rotate the raw data 90° CW.
+        guard let detectionBox else { return UIImage(cgImage: reticleImage, scale: 1, orientation: .right) }
 
         let width = CGFloat(reticleImage.width)
         let height = CGFloat(reticleImage.height)
@@ -139,9 +142,9 @@ final class CameraController: NSObject, AVCaptureVideoDataOutputSampleBufferDele
         ).intersection(CGRect(x: 0, y: 0, width: width, height: height))
 
         guard !pixelRect.isEmpty, let cropped = reticleImage.cropping(to: pixelRect) else {
-            return UIImage(cgImage: reticleImage)
+            return UIImage(cgImage: reticleImage, scale: 1, orientation: .right)
         }
-        return UIImage(cgImage: cropped)
+        return UIImage(cgImage: cropped, scale: 1, orientation: .right)
     }
 }
 
