@@ -2,15 +2,27 @@ import Vision
 import CoreImage
 
 final class OCRScanner {
-    func recognizeText(in pixelBuffer: CVPixelBuffer, completion: @escaping ([String]) -> Void) {
-        perform(VNImageRequestHandler(cvPixelBuffer: pixelBuffer, options: [:]), completion: completion)
+    func recognizeText(
+        in pixelBuffer: CVPixelBuffer,
+        regionOfInterest: CGRect? = nil,
+        completion: @escaping ([String]) -> Void
+    ) {
+        perform(
+            VNImageRequestHandler(cvPixelBuffer: pixelBuffer, options: [:]),
+            regionOfInterest: regionOfInterest,
+            completion: completion
+        )
     }
 
     func recognizeText(in cgImage: CGImage, completion: @escaping ([String]) -> Void) {
-        perform(VNImageRequestHandler(cgImage: cgImage, options: [:]), completion: completion)
+        perform(VNImageRequestHandler(cgImage: cgImage, options: [:]), regionOfInterest: nil, completion: completion)
     }
 
-    private func perform(_ handler: VNImageRequestHandler, completion: @escaping ([String]) -> Void) {
+    private func perform(
+        _ handler: VNImageRequestHandler,
+        regionOfInterest: CGRect?,
+        completion: @escaping ([String]) -> Void
+    ) {
         let request = VNRecognizeTextRequest { request, error in
             guard error == nil,
                   let results = request.results as? [VNRecognizedTextObservation] else {
@@ -23,6 +35,9 @@ final class OCRScanner {
         request.recognitionLevel = .accurate
         request.recognitionLanguages = ["en-US", "fr-FR"]
         request.usesLanguageCorrection = false
+        if let regionOfInterest {
+            request.regionOfInterest = regionOfInterest
+        }
 
         do {
             try handler.perform([request])

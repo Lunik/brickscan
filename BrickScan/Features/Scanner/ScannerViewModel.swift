@@ -1,6 +1,7 @@
 import Foundation
 import AVFoundation
 import Observation
+import UIKit
 
 enum ScannerState: Equatable {
     case scanning
@@ -36,6 +37,13 @@ final class ScannerViewModel {
     var state: ScannerState = .scanning
     var torchOn = false
     var candidateDetected = false
+    /// A crop of the reticle region captured the moment a candidate is detected — lets the
+    /// overlay show "this is what got scanned" before the network result comes back. Captured
+    /// once per candidate (see `scheduleResolution`), cleared on `resumeScanning` — see #32.
+    var candidateThumbnail: UIImage?
+    /// The on-screen reticle size, shared with `ScanOverlayView` and the Vision region of
+    /// interest / thumbnail crop, so "what's aimed at" and "what's detected" always agree.
+    static let reticleSize = CGSize(width: 280, height: 180)
     /// True when the current `.found` state was served from the local cache (instant display)
     /// rather than a fresh fetch — lets the presenting view know to silently reconcile it live.
     var lastFoundWasFromCache = false
@@ -115,6 +123,7 @@ final class ScannerViewModel {
         state = .scanning
         isPaused = false
         candidateDetected = false
+        candidateThumbnail = nil
     }
 
     func lookupSetNumber(_ setNum: String) {
@@ -209,27 +218,33 @@ final class ScannerViewModel {
         }
         lastFrameProcessedAt = Date()
 
-        barcodeScanner.detectBarcode(in: pixelBuffer) { [weak self] barcodeValue in
+        let regionOfInterest = cameraController.visionRegionOfInterest(forReticleSize: Self.reticleSize)
+        barcodeScanner.detectBarcode(in: pixelBuffer, regionOfInterest: regionOfInterest) { [weak self] barcodeValue in
             if let barcodeValue {
                 let candidate = SetNumberExtractor.extractFromBarcode(barcodeValue)
-                self?.scheduleResolution(for: candidate)
+                self?.scheduleResolution(for: candidate, pixelBuffer: pixelBuffer)
                 return
             }
 
-            self?.ocrScanner.recognizeText(in: pixelBuffer) { texts in
+            self?.ocrScanner.recognizeText(in: pixelBuffer, regionOfInterest: regionOfInterest) { texts in
                 let candidates = SetNumberExtractor.extractFromOCR(texts)
                 if let first = candidates.first {
-                    self?.scheduleResolution(for: first)
+                    self?.scheduleResolution(for: first, pixelBuffer: pixelBuffer)
                 }
             }
         }
     }
 
-    private func scheduleResolution(for setNum: String) {
+    private func scheduleResolution(for setNum: String, pixelBuffer: CVPixelBuffer) {
         if let lastDate = recentlyIdentifiedAt[setNum], Date().timeIntervalSince(lastDate) < 30 {
             return
         }
 
+        // Capture the thumbnail once per candidate, not on every throttled frame while its
+        // debounce is pending.
+        if !candidateDetected {
+            candidateThumbnail = cameraController.croppedReticleImage(from: pixelBuffer, reticleSize: Self.reticleSize)
+        }
         candidateDetected = true
         debounceTasks[setNum]?.cancel()
         // Offline, there's no network round-trip to debounce against — resolving immediately

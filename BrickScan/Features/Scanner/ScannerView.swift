@@ -13,7 +13,11 @@ struct ScannerView: View {
             ZStack {
                 CameraPreviewView(controller: viewModel.cameraController)
                     .ignoresSafeArea()
-                ScanOverlayView(state: viewModel.state, candidateDetected: viewModel.candidateDetected)
+                ScanOverlayView(
+                    state: viewModel.state,
+                    candidateDetected: viewModel.candidateDetected,
+                    candidateThumbnail: viewModel.candidateThumbnail
+                )
 
                 if !hasAPIKey {
                     apiKeyWarningBanner
