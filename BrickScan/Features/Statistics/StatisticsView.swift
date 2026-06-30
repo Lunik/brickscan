@@ -43,6 +43,14 @@ struct StatisticsView: View {
         .onChange(of: viewModel?.isUpdatingAllPrices) { _, isUpdating in
             UIApplication.shared.isIdleTimerDisabled = isUpdating ?? false
         }
+        .onChange(of: viewModel?.priceUpdateDone) { _, _ in
+            // Each increment means the batch just persisted one more set's price (see
+            // CollectionPriceUpdater.start) — recompute so the total/coverage climb live
+            // instead of staying frozen until the whole batch finishes (#48).
+            if viewModel?.isUpdatingAllPrices == true {
+                viewModel?.recomputeStats()
+            }
+        }
         .sheet(item: $csvURL) { url in ShareSheet(items: [url]) }
         .sheet(item: $pdfURL) { url in ShareSheet(items: [url]) }
     }
@@ -94,9 +102,13 @@ struct StatisticsView: View {
             Text("Valeur estimée").font(.headline)
             Text(viewModel.stats.totalValueEUR.formatted(.currency(code: "EUR")))
                 .font(.title2.bold())
+                .contentTransition(.numericText(value: viewModel.stats.totalValueEUR))
+                .animation(.default, value: viewModel.stats.totalValueEUR)
             Text("Basée sur \(viewModel.stats.setsWithKnownPrice) / \(viewModel.stats.setCount) sets dont le prix est connu")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                .contentTransition(.numericText(value: Double(viewModel.stats.setsWithKnownPrice)))
+                .animation(.default, value: viewModel.stats.setsWithKnownPrice)
 
             NavigationLink {
                 ListConditionsView()

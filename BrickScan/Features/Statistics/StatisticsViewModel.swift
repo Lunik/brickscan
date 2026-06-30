@@ -92,13 +92,25 @@ final class StatisticsViewModel {
     func load() {
         ownedSets = localRepository.ownedSets()
         conditionByListId = localRepository.conditionByListId()
-        let priceByNum = Dictionary(uniqueKeysWithValues: ownedSets.map { ($0.setNum, effectivePriceEUR(for: $0)) })
-        stats = Self.computeStats(from: ownedSets, priceByNum: priceByNum)
+        recomputeStats()
         themeNames = themeNameStore.namesByThemeId
         Task {
             await themeNameStore.refreshIfNeeded()
             themeNames = themeNameStore.namesByThemeId
         }
+    }
+
+    /// Re-derives `stats` from the already-fetched `ownedSets`/`conditionByListId` without
+    /// refetching either — called after `load()` and again after every set processed by the
+    /// price batch (see #48) so the total/coverage climb live instead of staying frozen until
+    /// the whole batch completes. Safe to call repeatedly: `ownedSets` holds the same SwiftData
+    /// model instances the batch's `persist` closure mutates (same `modelContext`), so each
+    /// `CachedSet.storePriceEUR` write is already visible here without a re-fetch — only the
+    /// derived `stats` snapshot itself needs reassigning to trigger a re-render, per the
+    /// `@Observable`-only-tracks-stored-properties rule in AGENTS.md.
+    func recomputeStats() {
+        let priceByNum = Dictionary(uniqueKeysWithValues: ownedSets.map { ($0.setNum, effectivePriceEUR(for: $0)) })
+        stats = Self.computeStats(from: ownedSets, priceByNum: priceByNum)
     }
 
     func themeName(forThemeId themeId: Int) -> String {
