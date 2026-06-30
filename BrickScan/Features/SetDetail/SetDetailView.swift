@@ -230,6 +230,8 @@ struct SetDetailView: View {
 
             legoStoreRow
 
+            pricePerPartRow
+
             ForEach([PriceSource.amazon, .bricklinkNew, .bricklinkUsed], id: \.self) { source in
                 sourceRow(source)
             }
@@ -252,6 +254,26 @@ struct SetDetailView: View {
                 }
             } else {
                 priceStatus(loading: viewModel.isLoadingStorePrice)
+            }
+        }
+    }
+
+    /// €/pièce derived from the lego.com retail price ÷ numParts. Hidden when
+    /// either value is unavailable or numParts is zero (avoids division-by-zero
+    /// and meaningless "0.00 €/pièce" for sets with unknown part counts).
+    @ViewBuilder
+    private var pricePerPartRow: some View {
+        let numParts = viewModel.legoSet.numParts
+        if numParts > 0, let storeAmount = viewModel.storePrice?.amount, storeAmount > 0 {
+            let currency = viewModel.storePrice?.currency ?? "EUR"
+            let ppp = Decimal(storeAmount) / Decimal(numParts)
+            priceRow(label: "€ / pièce") {
+                Text(formattedAmount(ppp, currency: currency))
+                    .foregroundStyle(.secondary)
+            }
+        } else if viewModel.isLoadingStorePrice && numParts > 0 {
+            priceRow(label: "€ / pièce") {
+                ProgressView().controlSize(.small)
             }
         }
     }
