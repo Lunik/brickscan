@@ -17,6 +17,17 @@ enum SetSortOption: String, CaseIterable, Identifiable {
         case .partCount: return "Nombre de pièces"
         }
     }
+
+    /// The direction each option reads most naturally in — newest/biggest first for the
+    /// numeric/date ones, A→Z for name. Used to reset `SetFilterState.sortAscending` whenever
+    /// the user switches `sort`, so flipping from "Nom" to "Année" doesn't carry over an
+    /// ascending choice that would otherwise show the oldest set first without explanation.
+    var defaultAscending: Bool {
+        switch self {
+        case .dateScanned, .year, .partCount: return false
+        case .name: return true
+        }
+    }
 }
 
 /// Search/filter/sort state for `CollectionView` and `HistoryView`. Held as a process-lifetime
@@ -36,9 +47,11 @@ final class SetFilterState {
     /// History only — `nil` shows both owned and not-owned, `true`/`false` restricts to one.
     var ownedOnly: Bool?
     var sort: SetSortOption = .dateScanned
+    var sortAscending = SetSortOption.dateScanned.defaultAscending
 
     var isFilterActive: Bool {
-        themeId != nil || year != nil || listName != nil || ownedOnly != nil || sort != .dateScanned
+        themeId != nil || year != nil || listName != nil || ownedOnly != nil ||
+            sort != .dateScanned || sortAscending != sort.defaultAscending
     }
 
     func resetFilters() {
@@ -47,6 +60,7 @@ final class SetFilterState {
         listName = nil
         ownedOnly = nil
         sort = .dateScanned
+        sortAscending = SetSortOption.dateScanned.defaultAscending
     }
 }
 
@@ -86,15 +100,19 @@ extension Array where Element == CachedSet {
             result = result.filter { $0.isInCollection == ownedOnly }
         }
 
+        let ascending = filter.sortAscending
         switch filter.sort {
         case .dateScanned:
-            result.sort { $0.lastScannedAt > $1.lastScannedAt }
+            result.sort { ascending ? $0.lastScannedAt < $1.lastScannedAt : $0.lastScannedAt > $1.lastScannedAt }
         case .year:
-            result.sort { $0.year > $1.year }
+            result.sort { ascending ? $0.year < $1.year : $0.year > $1.year }
         case .name:
-            result.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+            result.sort {
+                let order = $0.name.localizedCaseInsensitiveCompare($1.name)
+                return ascending ? order == .orderedAscending : order == .orderedDescending
+            }
         case .partCount:
-            result.sort { $0.numParts > $1.numParts }
+            result.sort { ascending ? $0.numParts < $1.numParts : $0.numParts > $1.numParts }
         }
 
         return result

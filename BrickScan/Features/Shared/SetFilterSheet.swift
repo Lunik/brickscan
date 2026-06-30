@@ -13,6 +13,12 @@ struct SetFilterSheet: View {
     let showsOwnedFilter: Bool
     let themeName: (Int) -> String
 
+    /// "Tous" stays pinned first (it's the no-filter row, not a real theme); the actual themes
+    /// sort by display name rather than raw `themeId`, since the id order is meaningless to a user.
+    private var sortedThemeIds: [Int] {
+        availableThemeIds.sorted { themeName($0).localizedCaseInsensitiveCompare(themeName($1)) == .orderedAscending }
+    }
+
     var body: some View {
         NavigationStack {
             Form {
@@ -22,12 +28,30 @@ struct SetFilterSheet: View {
                             Text(option.label).tag(option)
                         }
                     }
+                    .onChange(of: filter.sort) { _, newSort in
+                        filter.sortAscending = newSort.defaultAscending
+                    }
+
+                    Button {
+                        filter.sortAscending.toggle()
+                    } label: {
+                        HStack {
+                            Text("Ordre")
+                            Spacer()
+                            Label(
+                                filter.sortAscending ? "Croissant" : "Décroissant",
+                                systemImage: filter.sortAscending ? "arrow.up" : "arrow.down"
+                            )
+                            .foregroundStyle(.secondary)
+                        }
+                    }
+                    .foregroundStyle(.primary)
                 }
 
                 Section("Filtres") {
                     Picker("Thème", selection: $filter.themeId) {
                         Text("Tous").tag(Int?.none)
-                        ForEach(availableThemeIds, id: \.self) { themeId in
+                        ForEach(sortedThemeIds, id: \.self) { themeId in
                             Text(themeName(themeId)).tag(Int?.some(themeId))
                         }
                     }
