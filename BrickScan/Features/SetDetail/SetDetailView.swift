@@ -6,6 +6,7 @@ struct SetDetailView: View {
     @State private var viewModel: SetDetailViewModel
     @State private var showListPicker = false
     @State private var showRemoveConfirmation = false
+    @State private var showSettings = false
     @State private var priceHistory: [PriceHistoryEntry] = []
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
@@ -106,6 +107,9 @@ struct SetDetailView: View {
                         onScanAgain()
                     }
                 }
+            }
+            .sheet(isPresented: $showSettings) {
+                SettingsView()
             }
             .sheet(isPresented: $showListPicker) {
                 ListPickerView { listId, listName in
@@ -272,16 +276,20 @@ struct SetDetailView: View {
             let threshold = AppTheme.shared.preferredPricePerPart
             let pppDouble = (ppp as NSDecimalNumber).doubleValue
             let pct = Int(((pppDouble - threshold) / threshold * 100).rounded())
-            priceRow(label: "€ / pièce") {
-                HStack(spacing: 6) {
-                    if pct != 0 {
-                        Text("\(pct > 0 ? "+" : "")\(pct)%")
-                            .font(.caption2)
-                            .foregroundStyle(pct < 0 ? .green : Color.brickDanger)
+            Button { showSettings = true } label: {
+                priceRow(label: "€ / pièce") {
+                    HStack(spacing: 6) {
+                        if pct != 0 {
+                            Text("\(pct > 0 ? "+" : "")\(pct)%")
+                                .font(.caption2)
+                                .foregroundStyle(pct < 0 ? .green : Color.brickDanger)
+                        }
+                        Text(formattedAmount(ppp, currency: currency))
+                            .foregroundStyle(.primary)
                     }
-                    Text(formattedAmount(ppp, currency: currency))
                 }
             }
+            .buttonStyle(.plain)
         } else if viewModel.isLoadingStorePrice && numParts > 0 {
             priceRow(label: "€ / pièce") {
                 ProgressView().controlSize(.small)
