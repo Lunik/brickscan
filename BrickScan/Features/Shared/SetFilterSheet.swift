@@ -23,29 +23,24 @@ struct SetFilterSheet: View {
         NavigationStack {
             Form {
                 Section("Tri") {
-                    Picker("Trier par", selection: $filter.sort) {
-                        ForEach(SetSortOption.allCases) { option in
-                            Text(option.label).tag(option)
+                    HStack {
+                        Picker("Trier par", selection: $filter.sort) {
+                            ForEach(SetSortOption.allCases) { option in
+                                Text(option.label).tag(option)
+                            }
                         }
-                    }
-                    .onChange(of: filter.sort) { _, newSort in
-                        filter.sortAscending = newSort.defaultAscending
-                    }
+                        .onChange(of: filter.sort) { _, newSort in
+                            filter.sortAscending = newSort.defaultAscending
+                        }
 
-                    Button {
-                        filter.sortAscending.toggle()
-                    } label: {
-                        HStack {
-                            Text("Ordre")
-                            Spacer()
-                            Label(
-                                filter.sortAscending ? "Croissant" : "Décroissant",
-                                systemImage: filter.sortAscending ? "arrow.up" : "arrow.down"
-                            )
-                            .foregroundStyle(.secondary)
+                        Button {
+                            filter.sortAscending.toggle()
+                        } label: {
+                            Image(systemName: filter.sortAscending ? "arrow.up" : "arrow.down")
+                                .foregroundStyle(.secondary)
                         }
+                        .buttonStyle(.borderless)
                     }
-                    .foregroundStyle(.primary)
                 }
 
                 Section("Filtres") {
