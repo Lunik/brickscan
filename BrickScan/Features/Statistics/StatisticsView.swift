@@ -37,6 +37,12 @@ struct StatisticsView: View {
             }
             viewModel?.load()
         }
+        .onDisappear {
+            UIApplication.shared.isIdleTimerDisabled = false
+        }
+        .onChange(of: viewModel?.isUpdatingAllPrices) { _, isUpdating in
+            UIApplication.shared.isIdleTimerDisabled = isUpdating ?? false
+        }
         .sheet(item: $csvURL) { url in ShareSheet(items: [url]) }
         .sheet(item: $pdfURL) { url in ShareSheet(items: [url]) }
     }
