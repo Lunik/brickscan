@@ -14,6 +14,7 @@ struct HomeView: View {
     @State private var showPhotoPicker = false
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var showCollection = false
+    @State private var showListConditions = false
 
     let onStartScanning: () -> Void
     @Binding var pendingAction: HomeScreenShortcut?
@@ -60,6 +61,9 @@ struct HomeView: View {
             }
             .navigationDestination(isPresented: $showCollection) {
                 CollectionView(lookupViewModel: lookupViewModel)
+            }
+            .navigationDestination(isPresented: $showListConditions) {
+                ListConditionsView()
             }
             .sheet(isPresented: $showHistory) {
                 HistoryView(lookupViewModel: lookupViewModel) { setNum in
@@ -221,15 +225,21 @@ struct HomeView: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             } else {
-                Button {
-                    showCollection = true
-                } label: {
-                    HStack(spacing: 12) {
+                HStack(spacing: 12) {
+                    Button {
+                        showCollection = true
+                    } label: {
                         statCard(title: "Sets possédés", value: "\(viewModel.ownedSetsCount)", icon: "shippingbox")
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        showListConditions = true
+                    } label: {
                         statCard(title: "Listes", value: "\(viewModel.listsCount)", icon: "list.bullet")
                     }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
 
                 // Fixed height regardless of which branch renders: letting this row appear/
                 // disappear reflows the ScrollView content while .refreshable's pull gesture is
