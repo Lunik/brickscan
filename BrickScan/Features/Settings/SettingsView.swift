@@ -1,9 +1,31 @@
 import SwiftUI
+import SwiftData
 
 /// Date-only, French-locale style for the "last updated/downloaded" timestamps in this view —
 /// the app's UI text is all French regardless of the device's system locale, so dates shown
 /// here shouldn't silently follow it either.
 private let frenchDateStyle = Date.FormatStyle(date: .abbreviated, time: .omitted, locale: Locale(identifier: "fr_FR"))
+
+/// Inline picker for a single list's condition; extracts the `@Environment(\.modelContext)`
+/// so the Binding can persist the change immediately on selection.
+private struct ListConditionRow: View {
+    let list: CachedSetList
+    @Environment(\.modelContext) private var modelContext
+
+    var body: some View {
+        Picker(list.name, selection: Binding(
+            get: { list.condition },
+            set: {
+                list.condition = $0
+                try? modelContext.save()
+            }
+        )) {
+            ForEach(ListCondition.allCases) { condition in
+                Text(condition.displayName).tag(condition)
+            }
+        }
+    }
+}
 
 struct SettingsView: View {
     @State private var viewModel = SettingsViewModel()
@@ -17,6 +39,7 @@ struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
+    @Query(sort: \CachedSetList.name) private var setLists: [CachedSetList]
 
     var body: some View {
         NavigationStack {
@@ -77,6 +100,18 @@ struct SettingsView: View {
                     Text("Valeur cible")
                 } footer: {
                     Text("Seuil de €/pièce en dessous duquel un set est considéré comme un bon rapport qualité-prix. Affiché en vert sur la fiche set si le prix lego.com est inférieur à cette valeur, en rouge au-dessus.")
+                }
+
+                if !setLists.isEmpty {
+                    Section {
+                        ForEach(setLists) { list in
+                            ListConditionRow(list: list)
+                        }
+                    } header: {
+                        Text("Listes de collection")
+                    } footer: {
+                        Text("L'état choisi détermine la source de prix utilisée pour valoriser les sets de chaque liste. « Retail » utilise lego.com (comportement par défaut), « Neuf » utilise la moyenne BrickLink neuf, « Occasion » utilise la moyenne BrickLink occasion.")
+                    }
                 }
 
                 Section {
