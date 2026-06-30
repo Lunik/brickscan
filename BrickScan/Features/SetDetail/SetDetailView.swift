@@ -261,15 +261,25 @@ struct SetDetailView: View {
     /// €/pièce derived from the lego.com retail price ÷ numParts. Hidden when
     /// either value is unavailable or numParts is zero (avoids division-by-zero
     /// and meaningless "0.00 €/pièce" for sets with unknown part counts).
+    /// Coloured green/red relative to the user's preferred PPP threshold.
     @ViewBuilder
     private var pricePerPartRow: some View {
         let numParts = viewModel.legoSet.numParts
         if numParts > 0, let storeAmount = viewModel.storePrice?.amount, storeAmount > 0 {
             let currency = viewModel.storePrice?.currency ?? "EUR"
             let ppp = Decimal(storeAmount) / Decimal(numParts)
+            let threshold = AppTheme.shared.preferredPricePerPart
+            let pppDouble = (ppp as NSDecimalNumber).doubleValue
+            let pct = Int(((pppDouble - threshold) / threshold * 100).rounded())
             priceRow(label: "€ / pièce") {
-                Text(formattedAmount(ppp, currency: currency))
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 6) {
+                    if pct != 0 {
+                        Text("\(pct > 0 ? "+" : "")\(pct)%")
+                            .font(.caption2)
+                            .foregroundStyle(pct < 0 ? .green : Color.brickDanger)
+                    }
+                    Text(formattedAmount(ppp, currency: currency))
+                }
             }
         } else if viewModel.isLoadingStorePrice && numParts > 0 {
             priceRow(label: "€ / pièce") {
