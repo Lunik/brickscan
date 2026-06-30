@@ -453,6 +453,6 @@ Hard-won specifics — don't re-break these:
   `CollectionStatus` is silently re-fetched live (see above). Catalog data is static enough after
   a set's release that re-fetching it on every cache hit wasn't judged worth the extra request;
   ask before adding it if that assumption turns out wrong.
-- No search/filter UI on Collection/History yet, no per-theme/year stats breakdown, no exposed
-  "create list"/"move between lists" UI — `RebrickableRepository` supports the calls
-  (`createSetList`, `moveSetToList`) but nothing in `Features/` calls them yet.
+- No per-theme/year stats breakdown, no exposed "create list"/"move between lists" UI —
+  `RebrickableRepository` supports the calls (`createSetList`, `moveSetToList`) but nothing in
+  `Features/` calls them yet.
