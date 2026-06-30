@@ -249,6 +249,7 @@ struct SetDetailView: View {
                 let code = viewModel.storePrice?.currency ?? "EUR"
                 if let url = LegoStoreRepository.storeUrl(setNum: viewModel.legoSet.setNum) {
                     Link(formattedAmount(Decimal(amount), currency: code), destination: url)
+                        .foregroundStyle(.primary)
                 } else {
                     Text(formattedAmount(Decimal(amount), currency: code))
                 }
@@ -303,6 +304,7 @@ struct SetDetailView: View {
                     }
                     if let sourceURL = quote.sourceURL {
                         Link(formattedAmount(quote.amount, currency: quote.currency), destination: sourceURL)
+                            .foregroundStyle(.primary)
                     } else {
                         Text(formattedAmount(quote.amount, currency: quote.currency))
                     }
