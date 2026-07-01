@@ -5,6 +5,7 @@ import Charts
 struct SetDetailView: View {
     @State private var viewModel: SetDetailViewModel
     @State private var showListPicker = false
+    @State private var showMoveListPicker = false
     @State private var showRemoveConfirmation = false
     @State private var showSettings = false
     @State private var priceHistory: [PriceHistoryEntry] = []
@@ -114,6 +115,16 @@ struct SetDetailView: View {
             .sheet(isPresented: $showListPicker) {
                 ListPickerView { listId, listName in
                     Task { await viewModel.addToList(listId: listId, listName: listName) }
+                }
+            }
+            .sheet(isPresented: $showMoveListPicker) {
+                ListPickerView(
+                    excludeListId: {
+                        if case .inCollection(let userSet) = viewModel.collectionStatus { return userSet.listId }
+                        return nil
+                    }()
+                ) { listId, listName in
+                    Task { await viewModel.moveToList(toListId: listId, toListName: listName) }
                 }
             }
             .alert("Retirer de la collection ?", isPresented: $showRemoveConfirmation) {
@@ -419,6 +430,9 @@ struct SetDetailView: View {
         if viewModel.statusIsUnknown {
             EmptyView()
         } else if viewModel.isInCollection {
+            Button("Changer de liste") {
+                showMoveListPicker = true
+            }
             Button("Retirer de la collection", role: .destructive) {
                 showRemoveConfirmation = true
             }
