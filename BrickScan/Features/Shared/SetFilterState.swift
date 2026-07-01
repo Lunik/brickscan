@@ -128,14 +128,17 @@ extension Array where Element == CachedSet {
         case .partCount:
             result.sort { ascending ? $0.numParts < $1.numParts : $0.numParts > $1.numParts }
         case .price:
-            result.sort {
-                switch (priceFor($0), priceFor($1)) {
+            // Pre-resolve every price once — avoids calling the closure O(n log n) times
+            // (each call may rebuild an expensive dictionary from SwiftData results).
+            let prices = result.map { (set: $0, price: priceFor($0)) }
+            result = prices.sorted {
+                switch ($0.price, $1.price) {
                 case (nil, nil): return false
-                case (nil, _): return false       // no price → always last
+                case (nil, _): return false
                 case (_, nil): return true
                 case let (a?, b?): return ascending ? a < b : a > b
                 }
-            }
+            }.map(\.set)
         }
 
         return result
