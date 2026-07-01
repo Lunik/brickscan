@@ -93,10 +93,25 @@ final class SetDetailViewModel {
         guard NetworkMonitor.shared.isConnected else { return }
         pricesLoading = true
         defer { pricesLoading = false }
-        let quotes = await priceRepository.fetchPrices(for: legoSet)
-        if !quotes.isEmpty {
-            priceQuotes = quotes
+        // Connectivity is confirmed above, so an empty result here means every source was
+        // genuinely re-checked and came back unavailable — replace unconditionally so stale
+        // cached prices don't linger and mask a source going "Indisponible" (see issue on
+        // Amazon/BrickLink not refreshing like the Lego.com store price does).
+        priceQuotes = await priceRepository.fetchPrices(for: legoSet)
+    }
+
+    /// Auto-refresh scraped prices only when there's none cached yet, or the oldest cached
+    /// quote is older than `staleAfter` — mirrors `loadStorePriceIfNeeded`'s time-based check
+    /// instead of only refreshing when the cache is completely empty, which let a source that
+    /// went "Indisponible" show its last known price for up to 7 days (the hard cache TTL).
+    @discardableResult
+    @MainActor
+    func loadPricesIfNeeded(staleAfter: TimeInterval = 24 * 60 * 60) async -> Bool {
+        if let oldestFetch = priceQuotes.map(\.fetchedAt).min(), Date().timeIntervalSince(oldestFetch) < staleAfter {
+            return false
         }
+        await loadPrices()
+        return true
     }
 
     var isInCollection: Bool {
