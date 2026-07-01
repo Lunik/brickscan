@@ -10,7 +10,8 @@ import Foundation
 /// or similar field). The mapping *is* rendered on the Rebrickable minifig's
 /// own web page though, in an "External Sites" table — so for minifigs we
 /// scrape that page first to resolve the BrickLink `M=` ID, then fetch the
-/// price guide as normal.
+/// price guide as normal. The resolved ID is cached in `BrickLinkMinifigIdStore`
+/// (permanent mapping, never re-scraped once known).
 ///
 /// The price guide page is a deeply nested table with four "Last 6 Months Sales"
 /// summary quadrants (New-sold, Used-sold, New-for-sale, Used-for-sale) followed
@@ -112,9 +113,11 @@ struct BrickLinkPriceScraper: Sendable {
     // (nonisolated) init's context. Resolved lazily in `fetchPrices` instead,
     // where `await` can hop onto the main actor.
     private let scraper: HeadlessWebScraper?
+    private let minifigIdStore: BrickLinkMinifigIdStore
 
-    init(scraper: HeadlessWebScraper? = nil) {
+    init(scraper: HeadlessWebScraper? = nil, minifigIdStore: BrickLinkMinifigIdStore = .shared) {
         self.scraper = scraper
+        self.minifigIdStore = minifigIdStore
     }
 
     func fetchPrices(for legoSet: LegoSet) async throws -> [PriceQuote] {
@@ -145,23 +148,30 @@ struct BrickLinkPriceScraper: Sendable {
     }
 
     private func fetchMinifigPrices(setNum: String, scraper: HeadlessWebScraper) async throws -> [PriceQuote] {
-        // Step 1: resolve the BrickLink `M=` ID from Rebrickable's own minifig
-        // page. The bare (slug-less) URL redirects to the canonical one.
-        guard let rebrickableURL = URL(string: "https://rebrickable.com/minifigs/\(setNum)/") else {
-            throw ScrapeError.notFound
-        }
-        let externalIdJson = try await scraper.loadAndExtract(
-            url: rebrickableURL,
-            readinessScript: Self.externalIdReadinessScript,
-            extractScript: Self.externalIdExtractScript
-        )
-        guard let externalIdData = externalIdJson.data(using: .utf8),
-              let externalId = try? JSONDecoder().decode(RawExternalId.self, from: externalIdData) else {
-            throw ScrapeError.parsingFailed
+        // Step 1: resolve the BrickLink `M=` ID, from the on-disk cache if a
+        // previous lookup already resolved it — the mapping is permanent, so
+        // there's no reason to re-scrape Rebrickable's minifig page every time.
+        let bricklinkId: String
+        if let cached = await minifigIdStore.lookup(setNum: setNum) {
+            bricklinkId = cached
+        } else {
+            guard let rebrickableURL = URL(string: "https://rebrickable.com/minifigs/\(setNum)/") else {
+                throw ScrapeError.notFound
+            }
+            let externalIdJson = try await scraper.loadAndExtract(
+                url: rebrickableURL,
+                readinessScript: Self.externalIdReadinessScript,
+                extractScript: Self.externalIdExtractScript
+            )
+            guard let externalIdData = externalIdJson.data(using: .utf8),
+                  let externalId = try? JSONDecoder().decode(RawExternalId.self, from: externalIdData) else {
+                throw ScrapeError.parsingFailed
+            }
+            bricklinkId = externalId.id
+            await minifigIdStore.save(setNum: setNum, bricklinkId: bricklinkId)
         }
 
         // Step 2: fetch the price guide for the resolved BrickLink minifig ID.
-        let bricklinkId = externalId.id
         guard let priceGuideURL = URL(string: "https://www.bricklink.com/catalogPG.asp?M=\(bricklinkId)&viewExclude=Y") else {
             throw ScrapeError.notFound
         }
