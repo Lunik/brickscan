@@ -9,10 +9,16 @@ struct ListPickerView: View {
     @Environment(\.dismiss) private var dismiss
 
     private let repository: RebrickableRepositoryProtocol
+    private let excludeListId: Int?
     let onConfirm: (Int, String) -> Void
 
-    init(repository: RebrickableRepositoryProtocol = RebrickableRepository(), onConfirm: @escaping (Int, String) -> Void) {
+    init(
+        repository: RebrickableRepositoryProtocol = RebrickableRepository(),
+        excludeListId: Int? = nil,
+        onConfirm: @escaping (Int, String) -> Void
+    ) {
         self.repository = repository
+        self.excludeListId = excludeListId
         self.onConfirm = onConfirm
     }
 
@@ -22,7 +28,7 @@ struct ListPickerView: View {
                 if isLoading {
                     ProgressView()
                 } else {
-                    ForEach(setLists) { list in
+                    ForEach(setLists.filter { $0.id != excludeListId }) { list in
                         Button {
                             selectedListId = list.id
                         } label: {
