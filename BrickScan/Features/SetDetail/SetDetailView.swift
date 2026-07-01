@@ -430,11 +430,17 @@ struct SetDetailView: View {
         if viewModel.statusIsUnknown {
             EmptyView()
         } else if viewModel.isInCollection {
-            Button("Changer de liste") {
-                showMoveListPicker = true
-            }
-            Button("Retirer de la collection", role: .destructive) {
-                showRemoveConfirmation = true
+            VStack(spacing: 12) {
+                Button("Changer de liste") {
+                    showMoveListPicker = true
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(AppTheme.shared.accent)
+
+                Button("Retirer de la collection", role: .destructive) {
+                    showRemoveConfirmation = true
+                }
+                .font(.footnote)
             }
         } else {
             Button("Ajouter à une liste") {
