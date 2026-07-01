@@ -1,11 +1,20 @@
 import Foundation
 
-/// Scrapes the BrickLink "Price Guide" page for a set, which is addressable
-/// directly by set number — no search step needed.
+/// Scrapes BrickLink "Price Guide" pages for LEGO items.
 ///
-/// The page is a deeply nested table with four "Last 6 Months Sales" summary
-/// quadrants (New-sold, Used-sold, New-for-sale, Used-for-sale) followed by a
-/// per-month breakdown. The JS below walks the DOM by *visible row labels*
+/// For classic sets the item is addressable directly by set number — no
+/// lookup needed. For minifigs (Rebrickable `fig-…` prefix), Rebrickable and
+/// BrickLink use completely different ID schemes (e.g. `fig-004396` vs
+/// `oct033`) and the Rebrickable API doesn't expose the mapping (confirmed by
+/// inspecting a real `/lego/minifigs/{set_num}/` response: no `bricklink_id`
+/// or similar field). The mapping *is* rendered on the Rebrickable minifig's
+/// own web page though, in an "External Sites" table — so for minifigs we
+/// scrape that page first to resolve the BrickLink `M=` ID, then fetch the
+/// price guide as normal.
+///
+/// The price guide page is a deeply nested table with four "Last 6 Months Sales"
+/// summary quadrants (New-sold, Used-sold, New-for-sale, Used-for-sale) followed
+/// by a per-month breakdown. The JS below walks the DOM by *visible row labels*
 /// instead of CSS class names (undocumented, first to break on a redesign).
 ///
 /// The reliable anchor is the "Times Sold:" stat row: the New-sold and
@@ -21,6 +30,12 @@ struct BrickLinkPriceScraper: Sendable {
         let used: String?
         let new: String?
     }
+
+    private struct RawExternalId: Decodable {
+        let id: String
+    }
+
+    // MARK: - Price guide scripts (shared between set and minifig flows)
 
     static let readinessScript = """
     (function() {
@@ -63,6 +78,35 @@ struct BrickLinkPriceScraper: Sendable {
     })()
     """
 
+    // MARK: - Rebrickable "External Sites" lookup (minifigs only)
+
+    /// Waits for the "External Sites" table to render — a plain `<table>`
+    /// with one `<label td>/<value td>` row per external catalog (BrickLink,
+    /// BrickOwl, Brickset, …), confirmed by inspecting the live page.
+    static let externalIdReadinessScript = """
+    (function() {
+        var text = document.body ? document.body.innerText : '';
+        return text.indexOf('External Sites') !== -1;
+    })()
+    """
+
+    /// Finds the row whose first cell reads exactly "BrickLink" and returns
+    /// the linked catalog ID (e.g. "oct033") from its second cell.
+    static let externalIdExtractScript = """
+    (function() {
+        var rows = Array.from(document.querySelectorAll('tr'));
+        for (var i = 0; i < rows.length; i++) {
+            var cells = rows[i].querySelectorAll('td');
+            if (cells.length < 2) continue;
+            if (cells[0].textContent.trim() !== 'BrickLink') continue;
+            var link = cells[1].querySelector('a');
+            var id = (link ? link.textContent : cells[1].textContent).trim();
+            if (id) return JSON.stringify({ id: id });
+        }
+        return null;
+    })()
+    """
+
     // Not defaulted to `.shared` here: that's a main-actor-isolated static
     // property, and a default argument value must be evaluable in this
     // (nonisolated) init's context. Resolved lazily in `fetchPrices` instead,
@@ -73,7 +117,22 @@ struct BrickLinkPriceScraper: Sendable {
         self.scraper = scraper
     }
 
-    func fetchPrices(setNum: String) async throws -> [PriceQuote] {
+    func fetchPrices(for legoSet: LegoSet) async throws -> [PriceQuote] {
+        let scraper: HeadlessWebScraper
+        if let injected = self.scraper {
+            scraper = injected
+        } else {
+            scraper = await HeadlessWebScraper.shared
+        }
+
+        if legoSet.setNum.hasPrefix("fig-") {
+            return try await fetchMinifigPrices(setNum: legoSet.setNum, scraper: scraper)
+        } else {
+            return try await fetchSetPrices(setNum: legoSet.setNum, scraper: scraper)
+        }
+    }
+
+    private func fetchSetPrices(setNum: String, scraper: HeadlessWebScraper) async throws -> [PriceQuote] {
         // `viewExclude=Y` is BrickLink's "Exclude Incomplete Sets" toggle — we
         // want the value of a complete set, not one missing pieces.
         guard let priceGuideURL = URL(string: "https://www.bricklink.com/catalogPG.asp?S=\(setNum)&viewExclude=Y") else {
@@ -82,13 +141,39 @@ struct BrickLinkPriceScraper: Sendable {
         // The price guide is what we scrape; the link we surface is the set's
         // catalog item page (filter options in the fragment didn't stick).
         let itemURL = URL(string: "https://www.bricklink.com/v2/catalog/catalogitem.page?S=\(setNum)") ?? priceGuideURL
+        return try await fetchPricesFromGuide(priceGuideURL: priceGuideURL, itemURL: itemURL, scraper: scraper)
+    }
 
-        let scraper: HeadlessWebScraper
-        if let injected = self.scraper {
-            scraper = injected
-        } else {
-            scraper = await HeadlessWebScraper.shared
+    private func fetchMinifigPrices(setNum: String, scraper: HeadlessWebScraper) async throws -> [PriceQuote] {
+        // Step 1: resolve the BrickLink `M=` ID from Rebrickable's own minifig
+        // page. The bare (slug-less) URL redirects to the canonical one.
+        guard let rebrickableURL = URL(string: "https://rebrickable.com/minifigs/\(setNum)/") else {
+            throw ScrapeError.notFound
         }
+        let externalIdJson = try await scraper.loadAndExtract(
+            url: rebrickableURL,
+            readinessScript: Self.externalIdReadinessScript,
+            extractScript: Self.externalIdExtractScript
+        )
+        guard let externalIdData = externalIdJson.data(using: .utf8),
+              let externalId = try? JSONDecoder().decode(RawExternalId.self, from: externalIdData) else {
+            throw ScrapeError.parsingFailed
+        }
+
+        // Step 2: fetch the price guide for the resolved BrickLink minifig ID.
+        let bricklinkId = externalId.id
+        guard let priceGuideURL = URL(string: "https://www.bricklink.com/catalogPG.asp?M=\(bricklinkId)&viewExclude=Y") else {
+            throw ScrapeError.notFound
+        }
+        let itemURL = URL(string: "https://www.bricklink.com/v2/catalog/catalogitem.page?M=\(bricklinkId)") ?? priceGuideURL
+        return try await fetchPricesFromGuide(priceGuideURL: priceGuideURL, itemURL: itemURL, scraper: scraper)
+    }
+
+    private func fetchPricesFromGuide(
+        priceGuideURL: URL,
+        itemURL: URL,
+        scraper: HeadlessWebScraper
+    ) async throws -> [PriceQuote] {
         let json = try await scraper.loadAndExtract(
             url: priceGuideURL,
             readinessScript: Self.readinessScript,
