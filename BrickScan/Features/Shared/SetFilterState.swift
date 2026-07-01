@@ -6,6 +6,7 @@ enum SetSortOption: String, CaseIterable, Identifiable {
     case year
     case name
     case partCount
+    case price
 
     var id: String { rawValue }
 
@@ -15,6 +16,7 @@ enum SetSortOption: String, CaseIterable, Identifiable {
         case .year: return "Année"
         case .name: return "Nom"
         case .partCount: return "Nombre de pièces"
+        case .price: return "Prix"
         }
     }
 
@@ -24,7 +26,7 @@ enum SetSortOption: String, CaseIterable, Identifiable {
     /// ascending choice that would otherwise show the oldest set first without explanation.
     var defaultAscending: Bool {
         switch self {
-        case .dateScanned, .year, .partCount: return false
+        case .dateScanned, .year, .partCount, .price: return false
         case .name: return true
         }
     }
@@ -81,8 +83,14 @@ enum HistoryFilterState {
 }
 
 extension Array where Element == CachedSet {
+    /// - Parameter resolvedPrice: closure used only for `.price` sort — each screen passes its own
+    ///   rule (new-price chain for History, condition-aware for Collection). Nil falls back to
+    ///   `storePriceEUR` so callers that don't need price sorting can omit it.
     @MainActor
-    func filteredAndSorted(by filter: SetFilterState) -> [CachedSet] {
+    func filteredAndSorted(
+        by filter: SetFilterState,
+        resolvedPrice: ((CachedSet) -> Double?)? = nil
+    ) -> [CachedSet] {
         var result = self
 
         let trimmedSearch = filter.searchText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -106,6 +114,7 @@ extension Array where Element == CachedSet {
         }
 
         let ascending = filter.sortAscending
+        let priceFor = resolvedPrice ?? { $0.storePriceEUR }
         switch filter.sort {
         case .dateScanned:
             result.sort { ascending ? $0.lastScannedAt < $1.lastScannedAt : $0.lastScannedAt > $1.lastScannedAt }
@@ -118,6 +127,15 @@ extension Array where Element == CachedSet {
             }
         case .partCount:
             result.sort { ascending ? $0.numParts < $1.numParts : $0.numParts > $1.numParts }
+        case .price:
+            result.sort {
+                switch (priceFor($0), priceFor($1)) {
+                case (nil, nil): return false
+                case (nil, _): return false       // no price → always last
+                case (_, nil): return true
+                case let (a?, b?): return ascending ? a < b : a > b
+                }
+            }
         }
 
         return result

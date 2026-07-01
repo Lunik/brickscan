@@ -33,7 +33,7 @@ struct CollectionView: View {
     var body: some View {
         Group {
             if let viewModel, !viewModel.cachedSets.isEmpty {
-                let filteredSets = viewModel.filteredSets
+                let filteredSets = viewModel.cachedSets.filteredAndSorted(by: filter, resolvedPrice: resolvedPrice)
                 if filteredSets.isEmpty {
                     ContentUnavailableView(
                         "Aucun résultat",

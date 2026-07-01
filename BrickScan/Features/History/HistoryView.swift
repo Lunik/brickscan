@@ -13,7 +13,7 @@ struct HistoryView: View {
     let lookupViewModel: ScannerViewModel
     let onSelect: (String) -> Void
 
-    private var filteredSets: [CachedSet] { cachedSets.filteredAndSorted(by: filter) }
+    private var filteredSets: [CachedSet] { cachedSets.filteredAndSorted(by: filter, resolvedPrice: resolvedPrice) }
     private var availableThemeIds: [Int] { Set(cachedSets.map(\.themeId)).sorted() }
     private var availableYears: [Int] { Set(cachedSets.map(\.year)).sorted(by: >) }
 
